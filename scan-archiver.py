@@ -9,6 +9,9 @@ from tabulate import tabulate
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Create a session object for making requests
+session = requests.Session()
+
 # Function to List all Scans
 def list_scans(api_url, api_username, api_token):
     payload = {
@@ -19,7 +22,7 @@ def list_scans(api_url, api_username, api_token):
             "key": api_token
         }
     }
-    response = requests.post(api_url, json=payload)
+    response = session.post(api_url, json=payload)
     response.raise_for_status()
     return response.json()['data']
 
@@ -34,7 +37,7 @@ def get_scan_info(api_url, api_username, api_token, scan_code):
             "scan_code": scan_code
         }
     }
-    response = requests.post(api_url, json=payload)
+    response = session.post(api_url, json=payload)
     response.raise_for_status()
     return response.json()['data']
 
@@ -49,7 +52,7 @@ def get_project_info(api_url, api_username, api_token, project_code):
             "project_code": project_code
         }
     }
-    response = requests.post(api_url, json=payload)
+    response = session.post(api_url, json=payload)
     response.raise_for_status()
     return response.json()['data']
 
@@ -64,7 +67,7 @@ def archive_scan(api_url, api_username, api_token, scan_code):
             "scan_code": scan_code
         }
     }
-    response = requests.post(api_url, json=payload)
+    response = session.post(api_url, json=payload)
     response.raise_for_status()
     return response.status_code == 200
 
@@ -79,8 +82,8 @@ def main(api_url, api_username, api_token, days, dry_run):
         logging.error(f"Error: {str(e)}")
         exit(1)
 
-    # Step 2: Get scan information and filter scans older than the specified days
-    logging.info(f"Finding scans older than {days} days...")
+    # Step 2: Get scan information and keep only scans last modified before the specified days
+    logging.info(f"Finding scans that were last modified more than {days} days ago...")
     old_scans = []
     time_limit = datetime.now() - timedelta(days=days)
     for scan_id, scan_info in scans.items():
@@ -111,11 +114,9 @@ def main(api_url, api_username, api_token, days, dry_run):
     if dry_run:
         logging.info("Dry Run enabled!")
         logging.info("These are the scans that would be archived:")
-        table = []
-        for project_name, scan_name, scan_code, creation_date, update_date in old_scans:
-            age = (datetime.now() - creation_date).days
-            table.append([project_name, scan_name, age, update_date])
-        headers = ["PROJECT NAME", "SCAN NAME", "SCAN AGE (days)", "LAST UPDATED"]
+        headers = ["PROJECT NAME", "SCAN NAME", "SCAN AGE (days)", "LAST MODIFIED"]
+        table = [[project_name, scan_name, (datetime.now() - creation_date).days, update_date]
+                 for project_name, scan_name, scan_code, creation_date, update_date in old_scans]
         print(tabulate(table, headers, tablefmt="fancy_grid"))
         return
     
