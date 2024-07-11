@@ -30,6 +30,11 @@ The script includes a `--dry-run` option to create a list of scans that would be
 python3 scan-archiver.py --dry-run
 ```
 
+By default the script looks for scans that haven't been updated in more than 12 months, but that can be overridden.
+``` python
+python3 scan-archiver.py --dry-run --months 12
+```
+
 ## When ready, archive old scans
 When ready to archive old scans, run it without the `--dry-run` option. 
 
@@ -37,7 +42,7 @@ When ready to archive old scans, run it without the `--dry-run` option.
 python3 scan-archiver.py
 ```
 
-To specify the minimum age (in months) of scans to archive, use the `--months` option. This default to 12.
+To specify the age (in months) of scans to archive, use the `--months` option. This default to 12.
 
 ``` python
 python3 scan-archiver.py --months 12
