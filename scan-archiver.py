@@ -7,7 +7,7 @@ import os
 from tabulate import tabulate
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Create a session object for making requests
 session = requests.Session()
@@ -83,7 +83,7 @@ def main(api_url, api_username, api_token, days, dry_run):
         exit(1)
 
     # Step 2: Get scan information and keep only scans last modified before the specified days
-    logging.info(f"Finding scans that were last modified more than {days} days ago...")
+    logging.info(f"Finding scans that were last updated more than {days} days ago...")
     old_scans = []
     time_limit = datetime.now() - timedelta(days=days)
     for scan_id, scan_info in scans.items():
