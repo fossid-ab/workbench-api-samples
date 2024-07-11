@@ -3,7 +3,7 @@ This repo contains a script by the FossID CS Team to help clients Archive Old Sc
 By default, the script looks for scans that haven't been updated in over 12 months, but this value can be changed.
 
 ### Archive vs Delete?
-This script will not **_delete**_ scans - instead it **archives**_ them. Archiving a scan removes the files associated with that scan, but keeps the results for future review. This will reduce overall storage usage by Workbench while keeping results for review.
+This script will not **_delete** scans - instead it **archives** them. Archiving a scan removes the files associated with that scan, but keeps the results for future review. This will reduce overall storage usage by Workbench while keeping results for review.
 
 # Setting Up
 You need to provide a Workbench URL, User, and Token to use this script. 
