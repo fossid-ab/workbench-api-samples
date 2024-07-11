@@ -1,5 +1,5 @@
 # cs-scan-archiver
-This repo contains a script by the FossID CS Team to help clients Archive Old Scans. 
+This repo contains a script to help clients Archive Old Scans. 
 By default, the script looks for scans that haven't been updated in over 12 months, but this value can be changed.
 
 ### Archive vs Delete?
