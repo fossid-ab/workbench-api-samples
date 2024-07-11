@@ -89,6 +89,8 @@ def main(api_url, api_username, api_token, days, dry_run):
     for scan_id, scan_info in scans.items():
         scan_code = scan_info['code']
         scan_details = get_scan_info(api_url, api_username, api_token, scan_code)
+        if scan_details['is_archived']:
+            continue
         creation_date = datetime.strptime(scan_details['created'], "%Y-%m-%d %H:%M:%S")
         logging.debug(f"Scan: {scan_details['name']}, First Created: {creation_date}")
         update_date = datetime.strptime(scan_details['updated'], "%Y-%m-%d %H:%M:%S")
@@ -107,7 +109,8 @@ def main(api_url, api_username, api_token, days, dry_run):
     # Step 3: Notify if no Scans match the age criteria
     num_old_scans = len(old_scans)
     if num_old_scans == 0:
-        logging.info(f"No scans older than {days} days found.")
+        logging.info(f"No scans were last updated more than {days} days ago.")
+        logging.info(f"There is nothing to do! Exiting.")
         return
         
     # Dry run: Display the scans that would be archived
@@ -116,12 +119,12 @@ def main(api_url, api_username, api_token, days, dry_run):
         logging.info("These are the scans that would be archived:")
         headers = ["PROJECT NAME", "SCAN NAME", "SCAN AGE (days)", "LAST MODIFIED"]
         table = [[project_name, scan_name, (datetime.now() - creation_date).days, update_date]
-                 for project_name, scan_name, scan_code, creation_date, update_date in old_scans]
+                 for project_name, scan_name, creation_date, update_date in old_scans]
         print(tabulate(table, headers, tablefmt="fancy_grid"))
         return
     
     # Step 4: Prompt user for confirmation
-    logging.info(f"{num_old_scans} scans are older than {days} days.")
+    logging.info(f"{num_old_scans} scans were last updated more than {days} days ago.")
     logging.info("Please confirm you want to archive them.")
     confirmation = input("This operation is irreversible, proceed? (y/n): ")
     if confirmation.lower() != 'y':
