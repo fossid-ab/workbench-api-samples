@@ -37,7 +37,7 @@ def get_scan_info(api_url, api_username, api_token, scan_code):
     response.raise_for_status()
     return response.json()['data']
 
-# Function to get each Scan's Project Info
+# Function to the Project Info for each Scan
 def get_project_info(api_url, api_username, api_token, project_code):
     payload = {
         "group": "projects",
@@ -68,8 +68,8 @@ def archive_scan(api_url, api_username, api_token, scan_code):
     return response.status_code == 200
 
 def main(api_url, api_username, api_token, months, dry_run):
+    # Step 1: List all scans
     try:
-        # Step 1: List all scans
         scans = list_scans(api_url, api_username, api_token)
     except requests.exceptions.RequestException as e:
         print("Failed to retrieve scans. Please double check the Workbench URL, Username, and Token.")
@@ -98,7 +98,9 @@ def main(api_url, api_username, api_token, months, dry_run):
     if num_old_scans == 0:
         print(f"No scans older than {months} months found.")
         return
-    
+    else:
+        print(f"Found {num_old_scans} scans older than {months} months.")
+        
     # Dry run: Display the scans that would be archived
     if dry_run:
         table = []
@@ -127,8 +129,8 @@ if __name__ == "__main__":
     parser.add_argument('--workbench-url', type=str, help='The Workbench API URL')
     parser.add_argument('--workbench-user', type=str, help='Your Workbench username')
     parser.add_argument('--workbench-token', type=str, help='Your Workbench API token')
-    parser.add_argument('--months', type=int, default=12, help='Number of months to consider old (default: 12)')
-    parser.add_argument('--dry-run', action='store_true', help='Only display scans that would be archived without actually archiving them')
+    parser.add_argument('--months', type=int, default=12, help='Scan age in months to consider old (default: 12)')
+    parser.add_argument('--dry-run', action='store_true', help='Display scans that would be archived without actually archiving them')
     
     args = parser.parse_args()
     
