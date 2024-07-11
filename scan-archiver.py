@@ -72,7 +72,8 @@ def main(api_url, api_username, api_token, months, dry_run):
     try:
         scans = list_scans(api_url, api_username, api_token)
     except requests.exceptions.RequestException as e:
-        print("Failed to retrieve scans. Please double check the Workbench URL, Username, and Token.")
+        print("Failed to retrieve scans from Workbench.")
+        print("Please double check the Workbench URL, Username, and Token.")
         print(f"Error: {str(e)}")
         exit(1)
 
@@ -93,13 +94,11 @@ def main(api_url, api_username, api_token, months, dry_run):
                 project_name = 'No Project'
             old_scans.append((project_name, scan_details['name'], creation_date))
     
-    # Step 3: Enumerate number of scans older than the specified months
+    # Step 3: Notify if no Scans match the age criteria
     num_old_scans = len(old_scans)
     if num_old_scans == 0:
         print(f"No scans older than {months} months found.")
         return
-    else:
-        print(f"Found {num_old_scans} scans older than {months} months.")
         
     # Dry run: Display the scans that would be archived
     if dry_run:
@@ -112,7 +111,8 @@ def main(api_url, api_username, api_token, months, dry_run):
         return
     
     # Step 4: Prompt user for confirmation
-    confirmation = input(f"{num_old_scans} scans are older than {months} months. Do you want to archive them? (y/n): ")
+    print(f"{num_old_scans} scans are older than {months} months.")
+    confirmation = input("Do you want to archive them? (y/n): ")
     if confirmation.lower() != 'y':
         print("Operation cancelled.")
         return
