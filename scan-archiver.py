@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Copyright: FossID AB 2024
+
 import requests
 import json
 from datetime import datetime, timedelta
