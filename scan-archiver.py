@@ -7,13 +7,14 @@ of days, and archives them. It supports a dry-run mode to display the scans that
 """
 
 import sys
-import requests
 from datetime import datetime, timedelta
 import logging
 import argparse
 import os
-from tabulate import tabulate
 from typing import List, Tuple, Dict, Any
+
+import requests
+from tabulate import tabulate
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -125,8 +126,8 @@ def main(url: str, username: str, token: str, days: int, dry_run: bool):
     logging.info("Fetching scans from Workbench...")
     try:
         scans = list_scans(url, username, token)
-    except Exception:
-        logging.info("Failed to retrieve scans from Workbench.")
+    except requests.exceptions.RequestException as e:
+        logging.info("Failed to retrieve scans from Workbench: %s", str(e))
         logging.info("Please double-check the Workbench URL, Username, and Token.")
         sys.exit(1)
 
