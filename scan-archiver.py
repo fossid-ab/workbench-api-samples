@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-# Copyright: FossID AB 2024
+"""
+This script archives old scans from the FossID Workbench.
 
+It lists all scans, identifies the ones that have not been updated in a specified number
+of days, and archives them. It supports a dry-run mode to display the scans that would be archived.
+"""
+
+import sys
 import requests
+import json
 from datetime import datetime, timedelta
 import logging
 import argparse
@@ -22,7 +29,7 @@ def make_api_call(api_url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         response.raise_for_status()
         return response.json()['data']
     except requests.exceptions.RequestException as e:
-        logging.error(f"API call failed: {str(e)}")
+        logging.error("API call failed: %s", str(e))
         raise
 
 def list_scans(api_url: str, api_username: str, api_token: str) -> Dict[str, Any]:
@@ -79,14 +86,15 @@ def archive_scan(api_url: str, api_username: str, api_token: str, scan_code: str
         response.raise_for_status()
         return response.status_code == 200
     except requests.exceptions.RequestException as e:
-        logging.error(f"Error archiving scan {scan_code}: {str(e)}")
+        logging.error("Error archiving scan %s: %s", scan_code, str(e))
         return False
 
-def find_old_scans(scans: Dict[str, Any], api_url: str, api_username: str, api_token: str, days: int) -> List[Tuple[str, str, str, datetime, datetime]]:
+def find_old_scans(scans: Dict[str, Any], api_url: str, api_username: str, api_token: str, days: int
+                  ) -> List[Tuple[str, str, str, datetime, datetime]]:
     """Find scans that were last updated before the specified days."""
     old_scans = []
     time_limit = datetime.now() - timedelta(days=days)
-    for scan_id, scan_info in scans.items():
+    for scan_info in scans.values():
         scan_code = scan_info['code']
         scan_details = get_scan_info(api_url, api_username, api_token, scan_code)
         if scan_details['is_archived']:
@@ -106,7 +114,7 @@ def display_scans(scans: List[Tuple[str, str, str, datetime, datetime]], dry_run
     """Display scans that would be archived."""
     headers = ["PROJECT NAME", "SCAN NAME", "SCAN AGE (days)", "LAST MODIFIED"]
     table = [[project_name, scan_name, (datetime.now() - update_date).days, update_date]
-             for project_name, scan_name, scan_code, creation_date, update_date in scans]
+             for project_name, scan_name, _, _, update_date in scans]
     print(tabulate(table, headers, tablefmt="fancy_grid"))
     if dry_run:
         logging.info("Dry Run enabled! These scans would be archived:")
@@ -114,20 +122,20 @@ def display_scans(scans: List[Tuple[str, str, str, datetime, datetime]], dry_run
         logging.info("These scans will be archived:")
 
 def main(api_url: str, api_username: str, api_token: str, days: int, dry_run: bool):
+    """Main function to archive old scans."""
     logging.info("Fetching scans from Workbench...")
     try:
         scans = list_scans(api_url, api_username, api_token)
     except Exception:
         logging.info("Failed to retrieve scans from Workbench.")
         logging.info("Please double-check the Workbench URL, Username, and Token.")
-        exit(1)
-        
+        sys.exit(1)
 
-    logging.info(f"Finding scans last updated more than {days} days ago...")
+    logging.info("Finding scans last updated more than %d days ago...", days)
     old_scans = find_old_scans(scans, api_url, api_username, api_token, days)
     
     if not old_scans:
-        logging.info(f"No scans were last updated more than {days} days ago. Exiting.")
+        logging.info("No scans were last updated more than %d days ago. Exiting.", days)
         return
 
     display_scans(old_scans, dry_run)
@@ -141,11 +149,11 @@ def main(api_url: str, api_username: str, api_token: str, days: int, dry_run: bo
         return
 
     for project_name, scan_name, scan_code, creation_date, update_date in old_scans:
-        logging.info(f"Archiving scan: {scan_name}")
+        logging.info("Archiving scan: %s", scan_name)
         if archive_scan(api_url, api_username, api_token, scan_code):
-            logging.info(f"Archived scan: {scan_name}")
+            logging.info("Archived scan: %s", scan_name)
         else:
-            logging.info(f"Failed to archive scan: {scan_name}")
+            logging.info("Failed to archive scan: %s", scan_name)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Archive old scans.')
@@ -163,7 +171,7 @@ if __name__ == "__main__":
 
     if not api_url or not api_username or not api_token:
         logging.info("The Workbench URL, username, and token must be provided either as arguments or environment variables.")
-        exit(1)
+        sys.exit(1)
 
     # Sanity check for Workbench URL
     if not api_url.endswith('/api.php'):
