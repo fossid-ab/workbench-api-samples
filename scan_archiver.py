@@ -107,7 +107,9 @@ def find_old_scans(scans: Dict[str, Any], url: str, username: str, token: str, d
             if project_code:
                 project_info = get_project_info(url, username, token, project_code)
                 project_name = project_info.get('project_name', 'Unknown Project')
-            old_scans.append((project_name, scan_details['name'], scan_code, creation_date, update_date))
+            old_scans.append(
+                (project_name, scan_details['name'], scan_code, creation_date, update_date)
+            )
     return old_scans
 
 def display_scans(scans: List[Tuple[str, str, str, datetime, datetime]], dry_run: bool):
@@ -133,7 +135,6 @@ def main(url: str, username: str, token: str, days: int, dry_run: bool):
 
     logging.info("Finding scans last updated more than %d days ago...", days)
     old_scans = find_old_scans(scans, url, username, token, days)
-    
     if not old_scans:
         logging.info("No scans were last updated more than %d days ago. Exiting.", days)
         return
@@ -142,13 +143,12 @@ def main(url: str, username: str, token: str, days: int, dry_run: bool):
 
     if dry_run:
         return
-    
     confirmation = input("This operation is irreversible, proceed? (y/n): ")
     if confirmation.lower() != 'y':
         logging.info("Operation cancelled.")
         return
 
-    for project_name, scan_name, scan_code, creation_date, update_date in old_scans:
+    for scan_name, scan_code in old_scans:
         logging.info("Archiving scan: %s", scan_name)
         if archive_scan(url, username, token, scan_code):
             logging.info("Archived scan: %s", scan_name)
@@ -160,8 +160,17 @@ if __name__ == "__main__":
     parser.add_argument('--workbench-url', type=str, help='The Workbench API URL')
     parser.add_argument('--workbench-user', type=str, help='Your Workbench username')
     parser.add_argument('--workbench-token', type=str, help='Your Workbench API token')
-    parser.add_argument('--days', type=int, default=365, help='Scan age in days to consider old (default: 365)')
-    parser.add_argument('--dry-run', action='store_true', help='Display scans that would be archived without actually archiving them')
+    parser.add_argument(
+        '--days',
+        type=int,
+        default=365,
+        help='Scan age in days to consider old (default: 365)'
+    )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Display scans that would be archived without actually archiving them'
+    )
 
     args = parser.parse_args()
 
@@ -170,7 +179,8 @@ if __name__ == "__main__":
     api_token = args.workbench_token or os.getenv('WORKBENCH_TOKEN')
 
     if not api_url or not api_username or not api_token:
-        logging.info("The Workbench URL, username, and token must be provided either as arguments or environment variables.")
+        logging.info("The Workbench URL, username, and token must be provided either as arguments\n"
+                     "or environment variables.")
         sys.exit(1)
 
     # Sanity check for Workbench URL
