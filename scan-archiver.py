@@ -2,7 +2,6 @@
 # Copyright: FossID AB 2024
 
 import requests
-import json
 from datetime import datetime, timedelta
 import logging
 import argparse
@@ -122,6 +121,7 @@ def main(api_url: str, api_username: str, api_token: str, days: int, dry_run: bo
         logging.info("Failed to retrieve scans from Workbench.")
         logging.info("Please double-check the Workbench URL, Username, and Token.")
         exit(1)
+        
 
     logging.info(f"Finding scans last updated more than {days} days ago...")
     old_scans = find_old_scans(scans, api_url, api_username, api_token, days)
