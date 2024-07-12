@@ -114,14 +114,14 @@ def find_old_scans(scans: Dict[str, Any], url: str, username: str, token: str, d
 
 def display_scans(scans: List[Tuple[str, str, str, datetime, datetime]], dry_run: bool):
     """Display scans that would be archived."""
-    headers = ["PROJECT NAME", "SCAN NAME", "SCAN AGE (days)", "LAST MODIFIED"]
-    table = [[project_name, scan_name, (datetime.now() - update_date).days, update_date]
-             for project_name, scan_name, _, _, update_date in scans]
-    print(tabulate(table, headers, tablefmt="fancy_grid"))
     if dry_run:
         logging.info("Dry Run enabled! These scans would be archived:")
     else:
         logging.info("These scans will be archived:")
+    headers = ["PROJECT NAME", "SCAN NAME", "SCAN AGE (days)", "LAST MODIFIED"]
+    table = [[project_name, scan_name, (datetime.now() - update_date).days, update_date]
+             for project_name, scan_name, _, _, update_date in scans]
+    print(tabulate(table, headers, tablefmt="fancy_grid"))
 
 def main(url: str, username: str, token: str, days: int, dry_run: bool):
     """Main function to archive old scans."""
