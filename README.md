@@ -1,4 +1,4 @@
-# cs-scan_archiver
+# cs-scan-archiver
 
 This repo contains a script to help clients Archive Old Scans.
 By default, the script looks for scans that haven't been updated in over 365 days, but this value can be changed.
