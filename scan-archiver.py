@@ -8,7 +8,6 @@ of days, and archives them. It supports a dry-run mode to display the scans that
 
 import sys
 import requests
-import json
 from datetime import datetime, timedelta
 import logging
 import argparse
@@ -22,81 +21,81 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Create a session object for making requests
 session = requests.Session()
 
-def make_api_call(api_url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Helper function to make API calls."""
     try:
-        response = session.post(api_url, json=payload)
+        response = session.post(url, json=payload)
         response.raise_for_status()
         return response.json()['data']
     except requests.exceptions.RequestException as e:
         logging.error("API call failed: %s", str(e))
         raise
 
-def list_scans(api_url: str, api_username: str, api_token: str) -> Dict[str, Any]:
+def list_scans(url: str, username: str, token: str) -> Dict[str, Any]:
     """List all scans."""
     payload = {
         "group": "scans",
         "action": "list_scans",
         "data": {
-            "username": api_username,
-            "key": api_token
+            "username": username,
+            "key": token
         }
     }
-    return make_api_call(api_url, payload)
+    return make_api_call(url, payload)
 
-def get_scan_info(api_url: str, api_username: str, api_token: str, scan_code: str) -> Dict[str, Any]:
+def get_scan_info(url: str, username: str, token: str, scan_code: str) -> Dict[str, Any]:
     """Get scan info for each scan."""
     payload = {
         "group": "scans",
         "action": "get_information",
         "data": {
-            "username": api_username,
-            "key": api_token,
+            "username": username,
+            "key": token,
             "scan_code": scan_code
         }
     }
-    return make_api_call(api_url, payload)
+    return make_api_call(url, payload)
 
-def get_project_info(api_url: str, api_username: str, api_token: str, project_code: str) -> Dict[str, Any]:
+def get_project_info(url: str, username: str, token: str, project_code: str) -> Dict[str, Any]:
     """Get the project name for each scan's project code."""
     payload = {
         "group": "projects",
         "action": "get_information",
         "data": {
-            "username": api_username,
-            "key": api_token,
+            "username": username,
+            "key": token,
             "project_code": project_code
         }
     }
-    return make_api_call(api_url, payload)
+    return make_api_call(url, payload)
 
-def archive_scan(api_url: str, api_username: str, api_token: str, scan_code: str) -> bool:
+def archive_scan(url: str, username: str, token: str, scan_code: str) -> bool:
     """Archive a scan."""
     payload = {
         "group": "scans",
         "action": "archive_scan",
         "data": {
-            "username": api_username,
-            "key": api_token,
+            "username": username,
+            "key": token,
             "scan_code": scan_code
         }
     }
     try:
-        response = session.post(api_url, json=payload)
+        response = session.post(url, json=payload)
         response.raise_for_status()
         return response.status_code == 200
     except requests.exceptions.RequestException as e:
         logging.error("Error archiving scan %s: %s", scan_code, str(e))
         return False
 
-def find_old_scans(scans: Dict[str, Any], api_url: str, api_username: str, api_token: str, days: int
+def find_old_scans(scans: Dict[str, Any], url: str, username: str, token: str, days: int
                   ) -> List[Tuple[str, str, str, datetime, datetime]]:
     """Find scans that were last updated before the specified days."""
     old_scans = []
     time_limit = datetime.now() - timedelta(days=days)
     for scan_info in scans.values():
         scan_code = scan_info['code']
-        scan_details = get_scan_info(api_url, api_username, api_token, scan_code)
+        scan_details = get_scan_info(url, username, token, scan_code)
         if scan_details['is_archived']:
             continue
         creation_date = datetime.strptime(scan_details['created'], "%Y-%m-%d %H:%M:%S")
@@ -105,7 +104,7 @@ def find_old_scans(scans: Dict[str, Any], api_url: str, api_username: str, api_t
             project_code = scan_details.get('project_code')
             project_name = 'No Project'
             if project_code:
-                project_info = get_project_info(api_url, api_username, api_token, project_code)
+                project_info = get_project_info(url, username, token, project_code)
                 project_name = project_info.get('project_name', 'Unknown Project')
             old_scans.append((project_name, scan_details['name'], scan_code, creation_date, update_date))
     return old_scans
@@ -121,18 +120,18 @@ def display_scans(scans: List[Tuple[str, str, str, datetime, datetime]], dry_run
     else:
         logging.info("These scans will be archived:")
 
-def main(api_url: str, api_username: str, api_token: str, days: int, dry_run: bool):
+def main(url: str, username: str, token: str, days: int, dry_run: bool):
     """Main function to archive old scans."""
     logging.info("Fetching scans from Workbench...")
     try:
-        scans = list_scans(api_url, api_username, api_token)
+        scans = list_scans(url, username, token)
     except Exception:
         logging.info("Failed to retrieve scans from Workbench.")
         logging.info("Please double-check the Workbench URL, Username, and Token.")
         sys.exit(1)
 
     logging.info("Finding scans last updated more than %d days ago...", days)
-    old_scans = find_old_scans(scans, api_url, api_username, api_token, days)
+    old_scans = find_old_scans(scans, url, username, token, days)
     
     if not old_scans:
         logging.info("No scans were last updated more than %d days ago. Exiting.", days)
@@ -150,7 +149,7 @@ def main(api_url: str, api_username: str, api_token: str, days: int, dry_run: bo
 
     for project_name, scan_name, scan_code, creation_date, update_date in old_scans:
         logging.info("Archiving scan: %s", scan_name)
-        if archive_scan(api_url, api_username, api_token, scan_code):
+        if archive_scan(url, username, token, scan_code):
             logging.info("Archived scan: %s", scan_name)
         else:
             logging.info("Failed to archive scan: %s", scan_name)
