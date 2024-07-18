@@ -49,6 +49,22 @@ def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 # Function to Check Scan Status
 def check_scan_status(api_url, api_username, api_token, scan_code, process_id=None):
+    """
+    Check Workbench scan status
+
+    :param api_url: Workbench API URL. Must end with api.php
+    :type api_url: str
+    :param api_username: Workbench USERNAME
+    :type api_username: str
+    :param api_token: Workbench TOKEN
+    :type api_token: str
+    :param scan_code: Scan code
+    :type scan_code: str
+    :param process_id: Process ID
+    :type process_id: str
+    :return: API Scan Status Response
+    :rtype: dict
+    """
     payload = {
         "group": "scans",
         "action": "check_status",
@@ -69,6 +85,22 @@ def check_scan_status(api_url, api_username, api_token, scan_code, process_id=No
 
 # Function to Generate Report
 def generate_report(api_url, api_username, api_token, scan_code, report_type):
+    """
+    Generate Workbench report
+
+    :param api_url: Workbench API URL. Must end with api.php
+    :type api_url: str
+    :param api_username: Workbench USERNAME
+    :type api_username: str
+    :param api_token: Workbench TOKEN
+    :type api_token: str
+    :param scan_code: Scan code
+    :type scan_code: str
+    :param report_type: Report type
+    :type report_type: str
+    :return: Process ID and generation process ID
+    :rtype: tuple
+    """
     payload = {
         "group": "scans",
         "action": "generate_report",
@@ -91,6 +123,24 @@ def generate_report(api_url, api_username, api_token, scan_code, report_type):
 
 # Function to Download Report
 def download_report(api_url, api_username, api_token, scan_code, process_queue_id, report_type, output_dir):
+    """
+    Download report. If output_dir is set it will save it to that path.
+
+    :param api_url: Workbench API URL. Must end with api.php
+    :type api_url: str
+    :param api_username: Workbench USERNAME
+    :type api_username: str
+    :param api_token: Workbench TOKEN
+    :type api_token: str
+    :param scan_code: Scan code
+    :type scan_code: str
+    :param report_type: Report type
+    :type report_type: str
+    :param process_queue_id: ID of the Workbench process that downloads the report
+    :type process_queue_id: str
+    :param output_dir: Output director for the report
+    :type output_dir: str
+    """
     payload = {
         "group": "download",
         "action": "download_report",
