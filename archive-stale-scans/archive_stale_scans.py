@@ -22,14 +22,25 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Create a session object for making requests
 session = requests.Session()
 
+# Helper function to make API calls
 def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Helper function to make API calls."""
     try:
-        response = session.post(url, json=payload)
+        logging.debug(f"Making API call with payload: {json.dumps(payload, indent=2)}")
+        response = session.post(url, json=payload, timeout=10)
         response.raise_for_status()
-        return response.json()['data']
+        logging.debug(f"Received response: {response.text}")
+        return response.json().get('data', {})
     except requests.exceptions.RequestException as e:
-        logging.error("API call failed: %s", str(e))
+        logging.error(f"API call failed: {str(e)}")
+        logging.error(f"Response content: No response")
+        raise
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to parse JSON response: {str(e)}")
+        logging.error(f"Response content: No response")
+        raise
+    except Exception as ex:
+        logging.error(f"Failed to parse JSON response: {str(ex)}")
         raise
 
 def list_scans(url: str, username: str, token: str) -> Dict[str, Any]:

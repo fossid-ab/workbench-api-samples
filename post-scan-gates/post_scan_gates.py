@@ -37,11 +37,14 @@ def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         return response.json().get('data', {})
     except requests.exceptions.RequestException as e:
         logging.error(f"API call failed: {str(e)}")
-        logging.error(f"Response content: {response.text if response else 'No response'}")
+        logging.error(f"Response content: No response")
         raise
     except json.JSONDecodeError as e:
         logging.error(f"Failed to parse JSON response: {str(e)}")
-        logging.error(f"Response content: {response.text if response else 'No response'}")
+        logging.error(f"Response content: No response")
+        raise
+    except Exception as ex:
+        logging.error(f"Failed to parse JSON response: {str(ex)}")
         raise
 
 # Function to Check Scan Status
