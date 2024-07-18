@@ -1,7 +1,7 @@
-# download_reports
+# post_scan_reports
 
-This repo contains a script to help clients download reports after a scan.
-By default, the script downloads every possible report type once a scan completes.
+This script helps clients download reports after a scan.
+By default, the script generates and downloads every report type once a scan completes.
 
 # Setting Up
 
@@ -42,3 +42,9 @@ python3 scan_archiver.py --report-type ["html", "dynamic_top_matched_components"
 ```
 
 Currently only one report type is supported at a time.
+
+## Using together with the Workbench Agent
+
+You can use this script together with the [Workbench Agent](https://github.com/fossid-ab/workbench-agent/). 
+Use an Environment Variables, such as a built-in from your build environment, to set the scan code.
+Then use this script once the Workbench Agent completes its run!
