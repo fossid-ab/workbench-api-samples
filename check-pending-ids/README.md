@@ -1,4 +1,4 @@
-# post_scan_reports
+# check_pending_ids
 
 This script helps clients check if a scan contains Pending Identifications.
 This is useful for gating CI/CD pipelines when there are Identifications to process.
