@@ -1,6 +1,6 @@
 # post_scan_reports
 
-This script helps clients download reports after a scan.
+This script helps clients download reports after a scan completes.
 By default, the script generates and downloads every report type once a scan completes.
 
 You can use this script together with the [Workbench Agent](https://github.com/fossid-ab/workbench-agent/). 

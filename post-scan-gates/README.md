@@ -1,7 +1,7 @@
 # post_scan_gates
 
 This script helps clients gate their CI/CD pipelines based on information from Workbench.
-This script can break your build if the scan code provided has:
+This script can be used to halt a build pipeline if the scan has:
 - Any Files with Pending Identifications (Gate 1)
 - Any Files with Policy Violations (Gate 2)
 

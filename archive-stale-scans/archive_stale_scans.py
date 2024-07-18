@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-This script archives old scans from the FossID Workbench.
+This script archives stale scans from the FossID Workbench.
 
 It lists all scans, identifies the ones that have not been updated in a specified number
 of days, and archives them. It supports a dry-run mode to display the scans that would be archived.

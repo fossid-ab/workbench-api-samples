@@ -1,7 +1,6 @@
-# scan_archiver
+# archive_stale_scans
 
-This repo contains a script to help clients Archive Old Scans.
-By default, the script looks for scans that haven't been updated in over 365 days, but this value can be changed.
+This script helps clients archive stale scans to reduce the storage space used by Workbench.
 
 ### Archive vs Delete?
 
@@ -36,7 +35,7 @@ The script includes a `--dry-run` option to create a list of scans that would be
 python3 scan_archiver.py --dry-run
 ```
 
-By default the script looks for scans that haven't been updated in more than 365 days, but that can be overridden.
+A scan is considered stale when it hasn't been updated in more than 365 days, but that can be overridden.
 
 ```python
 python3 scan_archiver.py --dry-run --days 365
