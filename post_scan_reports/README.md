@@ -3,6 +3,10 @@
 This script helps clients download reports after a scan.
 By default, the script generates and downloads every report type once a scan completes.
 
+You can use this script together with the [Workbench Agent](https://github.com/fossid-ab/workbench-agent/). 
+Use an Environment Variables, such as a built-in from your build environment, to set the scan code.
+Then use this script once the Workbench Agent completes its run!
+
 # Setting Up
 
 You need to provide a Workbench URL, User, and Token to use this script.
@@ -56,8 +60,10 @@ This behavior can be overridden by specifying a `--check-interval` in seconds.
 python3 post_scan_reports.py --check-interval [time in seconds]
 ```
 
-## Using together with the Workbench Agent
+## Changing the Report Output Directory
+By default, reports will be output to the directory from which the script is executed. 
+You can override this behavior by passing `--output-dir`.
 
-You can use this script together with the [Workbench Agent](https://github.com/fossid-ab/workbench-agent/). 
-Use an Environment Variables, such as a built-in from your build environment, to set the scan code.
-Then use this script once the Workbench Agent completes its run!
+```python
+python3 post_scan_reports.py --output-dir ./reports/
+```
