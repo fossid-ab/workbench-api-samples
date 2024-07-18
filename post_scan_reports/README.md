@@ -19,7 +19,7 @@ export WORKBENCH_TOKEN
 ### Arguments
 
 ```python
-python3 download_scan_reports.py --workbench-url <url> --workbench-user <user> --workbench-token <token>
+python3 post_scan_reports.py --workbench-url <url> --workbench-user <user> --workbench-token <token>
 ```
 
 # General Usage
@@ -27,7 +27,7 @@ python3 download_scan_reports.py --workbench-url <url> --workbench-user <user> -
 Invoke the script by providing the scan code via `--scan-code`.
 
 ```python
-python3 download_scan_reports.py --scan-code <code>
+python3 post_scan_reports.py --scan-code <code>
 ```
 
 Please note you need to provide a **scan code**, not a scan name.
@@ -38,7 +38,7 @@ By default, the script downloads all available reports for the scan.
 Change this behavior by passing the `--report-type` argument.
 
 ```python
-python3 scan_archiver.py --report-type ["html", "dynamic_top_matched_components", "xlsx", "spdx", "spdx_lite", "cyclone_dx", "string_match"]
+python3 post_scan_reports.py --report-type ["html", "dynamic_top_matched_components", "xlsx", "spdx", "spdx_lite", "cyclone_dx", "string_match"]
 ```
 
 Currently only one report type is supported at a time.
@@ -53,7 +53,7 @@ By default, the script pings Workbench every 30 seconds to check the status of t
 This behavior can be overridden by specifying a `--check-interval` in seconds.
 
 ```python
-python3 scan_archiver.py --check-interval [time in seconds]
+python3 post_scan_reports.py --check-interval [time in seconds]
 ```
 
 ## Using together with the Workbench Agent
