@@ -174,8 +174,11 @@ def download_report(api_url, api_username, api_token, scan_code, process_queue_i
         except Exception as ex:
             logging.error(f"Error creating output directory: {output_dir} | {str(ex)}")
             output_dir = str()
-    if file_name:
-        file_name = os.path.join(output_dir, file_name)
+    if output_dir:
+        try:
+            file_name = os.path.join(output_dir, file_name)
+        except Exception as ex:
+            logging.error(f"Error joining output dir with filename: {output_dir} | {str(ex)}")
     with open(file_name, 'wb') as f:
         f.write(response.content)
     logging.info(f"Report downloaded and saved as {file_name}")
