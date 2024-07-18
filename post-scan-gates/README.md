@@ -1,7 +1,12 @@
-# check_pending_ids
+# post_scan_gates
 
-This script helps clients check if a scan contains Pending Identifications.
-This is useful for gating CI/CD pipelines when there are Identifications to process.
+This script helps clients gate their CI/CD pipelines based on information from Workbench.
+This script can break your build if the scan code provided has:
+- Any Files with Pending Identifications (Gate 1)
+- Any Files with Policy Violations (Gate 2)
+
+Files need to be Identified in order to be evaluated against Policy Rules.
+Thereforce, the Policy Check won't run if any files are Pending Identification. 
 
 You can use this script together with the [Workbench Agent](https://github.com/fossid-ab/workbench-agent/). 
 Use an Environment Variables, such as a built-in from your build environment, to set the scan code.
@@ -23,26 +28,37 @@ export WORKBENCH_TOKEN
 ### Arguments
 
 ```python
-python3 check_pending_id.py --workbench-url <url> --workbench-user <user> --workbench-token <token>
+python3 post_scan_gates.py --workbench-url <url> --workbench-user <user> --workbench-token <token>
 ```
 
 # General Usage
 
 Invoke the script by providing the scan code via `--scan-code`.
+Please note you need to provide a **scan code**, not a scan name.
 
 ```python
-python3 check_pending_id.py --scan-code <code>
+python3 post_scan_gates.py --scan-code <code>
 ```
 
-Please note you need to provide a **scan code**, not a scan name.
+When executed, the script will check the provided scan code for files with Pending Identifications.
+If any files contain Pending Identifications, a link is provided to the scan interface for users to review.
 
 ## Showing the Files Pending ID
 
-By default, the only provides a link to Pending ID tab in the Scan Interface. 
+By default, the script provides a link to Pending ID tab in the Scan Interface. 
 You can also display a list of files Pending ID with the `--show-files` argument.
 
 ```python
-python3 check_pending_id.py --show-files
+python3 post_scan_gates.py --show-files
+```
+
+## Check for Policy Violations
+
+By default, the script only checks for files with Pending Identifications.
+You can also check for policy violations with the `--policy-check` argument. 
+
+```python
+python3 post_scan_gates.py --policy-check
 ```
 
 ## Adjusting the Status Check Interval
