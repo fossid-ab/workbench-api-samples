@@ -199,8 +199,8 @@ def download_report(api_url, api_username, api_token, scan_code, process_queue_i
             f.write(contents)
     logging.info(f"Report downloaded and saved as {file_name}")
 
-
 def main(api_url, api_username, api_token, scan_code, report_type, check_interval, output_dir):
+
     try:
         # Step 1: Check for scan completion
         logging.info(f"Checking Scan: {scan_code} Status...")
@@ -210,6 +210,7 @@ def main(api_url, api_username, api_token, scan_code, report_type, check_interva
             time.sleep(check_interval)  # Wait for check_interval seconds before checking again
             scan_status = check_scan_status(api_url, api_username, api_token, scan_code)
         logging.info("Scan completed.")
+
         # Step 2: Generate and download reports
         if report_type == "ALL":
             for rpt_type in REPORT_TYPES:
@@ -253,16 +254,22 @@ def main(api_url, api_username, api_token, scan_code, report_type, check_interva
             # Step 4: Download report
             logging.info(f"Downloading {report_type} report...")
             download_report(api_url, api_username, api_token, scan_code, process_queue_id, report_type, output_dir)
+
     except Exception as e:
         logging.error(f"An error occurred: {str(e)}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Check scan status, generate and download report.')
+    parser = argparse.ArgumentParser(
+        description='Check scan status, generate and download report.',
+        epilog='Example: python script.py --scan-code SCAN123 --report-types xlsx spdx',
+        formatter_class=argparse.RawTextHelpFormatter
+    )
     parser.add_argument('--workbench-url', type=str, help='The Workbench API URL')
     parser.add_argument('--workbench-user', type=str, help='Your Workbench username')
     parser.add_argument('--workbench-token', type=str, help='Your Workbench API token')
     parser.add_argument('--scan-code', type=str, required=True, help='The scan code to check the status for')
+
     parser.add_argument('--report-type', type=str, default='ALL', help='The type of report to generate (default: ALL)')
     parser.add_argument('--output-dir', type=str, default=str(), required=False, help='Output directory')
     parser.add_argument('--check-interval', type=int, default=30,
