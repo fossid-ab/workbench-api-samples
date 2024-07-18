@@ -5,13 +5,13 @@ These scripts were built by the FossID Customer Experience teams to solve specif
 The repo contains the following scripts:
 
 ### Archive Old Scans
-This script helps clients Archive Old Scans based on the date they were last modified.
+This script helps clients archive stale scans based on when they were last modified.
 
 ### Post Scan Gates
 This script checks scans for Pending Identifications and Policy Violations - useful for gating CI/CD pipelines.
 
 ### Post Scan Reports
-This script generates various reports for a scan - useful if you want to include FossID reports as part of your build artifacts.
+This script downloads reports for a scan - useful if you want to include FossID reports with your build artifacts.
 
 ## Disclaimers
 These examples demonstrate how to interact with the Workbench API. We do our best to keep the examples updated, but there is no long-term maintainer for this code.
