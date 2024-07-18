@@ -7,6 +7,7 @@ of days, and archives them. It supports a dry-run mode to display the scans that
 """
 
 import sys
+import json
 from datetime import datetime, timedelta
 import logging
 import argparse

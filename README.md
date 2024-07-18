@@ -13,6 +13,9 @@ This script checks scans for Pending Identifications and Policy Violations - use
 ### Post Scan Reports
 This script downloads reports for a scan - useful if you want to include FossID reports with your build artifacts.
 
+### Quick Scan
+This script scans a single file using the Quick Scan API - helpful for quickly knowing if AI-generated code should be investigated further.
+
 ## Disclaimers
 These examples demonstrate how to interact with the Workbench API. We do our best to keep the examples updated, but there is no long-term maintainer for this code.
 
