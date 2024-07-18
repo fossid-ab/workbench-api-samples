@@ -55,11 +55,13 @@ python3 post_scan_gates.py --show-files
 ## Check for Policy Violations
 
 By default, the script only checks for files with Pending Identifications.
-You can also check for policy violations with the `--policy-check` argument. 
+Once all files have been Identified, you can check for policy violations with the `--policy-check` argument. 
 
 ```python
 python3 post_scan_gates.py --policy-check
 ```
+
+Please note the policy check will not run if any files contain Pending Identifications. 
 
 ## Adjusting the Status Check Interval
 
