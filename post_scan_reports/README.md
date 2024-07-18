@@ -43,6 +43,19 @@ python3 scan_archiver.py --report-type ["html", "dynamic_top_matched_components"
 
 Currently only one report type is supported at a time.
 
+## Adjusting the Status Check Interval
+
+There are two times the script has to wait on Workbench in order to complete its run.
+First, when the scan is running. Next, once report generation kicks off.
+Large scans may take a long time to complete, and large reports a long time to generate. 
+By default, the script pings Workbench every 30 seconds to check the status of these operations.
+
+This behavior can be overridden by specifying a `--check-interval` in seconds.
+
+```python
+python3 scan_archiver.py --check-interval [time in seconds]
+```
+
 ## Using together with the Workbench Agent
 
 You can use this script together with the [Workbench Agent](https://github.com/fossid-ab/workbench-agent/). 

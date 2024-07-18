@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 This script is meant to be executed after a scan has been initiated in FossID Workbench.
+This script will not initiate a scan - that is available with the Workbench Agent.
 
-It first checks that the scan completed.
+It first checks that the scan associated to the provided scan code completed.
 Once the scan is done, it generates and downloads the reports for that scan.
-All available report types will be downloaded.
+By default, all available report types will be downloaded.
 """
 
 import requests
