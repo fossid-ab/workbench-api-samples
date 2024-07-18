@@ -151,7 +151,7 @@ def download_report(api_url, api_username, api_token, scan_code, process_queue_i
             "process_id": process_queue_id
         }
     }
-    response = session.post(api_url, json=payload, timeout=60)
+    response = session.post(api_url, json=payload, timeout=120)
     response.raise_for_status()
 
     file_extension = {
@@ -179,8 +179,24 @@ def download_report(api_url, api_username, api_token, scan_code, process_queue_i
             file_name = os.path.join(output_dir, file_name)
         except Exception as ex:
             logging.error(f"Error joining output dir with filename: {output_dir} | {str(ex)}")
-    with open(file_name, 'wb') as f:
-        f.write(response.content)
+    contents = response.content
+    if report_type == "dynamic_top_matched_components":
+        # Process the data
+        try:
+            json_response = response.json()
+            data_info = json_response.get("data")
+            if data_info:
+                report_info = data_info.get("report")
+                if report_info:
+                    contents = report_info
+        except Exception as ex:
+            logging.error(f"Error downloading dynamic_top_matched_components report | {ex}")
+    if isinstance(contents, str):
+        with open(file_name, 'w') as f:
+            f.write(contents)
+    else:
+        with open(file_name, 'wb') as f:
+            f.write(contents)
     logging.info(f"Report downloaded and saved as {file_name}")
 
 
