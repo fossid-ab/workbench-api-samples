@@ -107,7 +107,7 @@ def download_report(api_url, api_username, api_token, scan_code, process_queue_i
         f.write(response.content)
     logging.info(f"Report downloaded and saved as {file_name}")
 
-def main(api_url, api_username, api_token, scan_code, report_type, check_interval):
+def main(api_url, api_username, api_token, scan_code, report_types, check_interval):
     try:
         # Step 1: Check for scan completion
         logging.info("Checking Scan Status...")
@@ -119,58 +119,47 @@ def main(api_url, api_username, api_token, scan_code, report_type, check_interva
         logging.info("Scan completed.")
 
         # List of all report types
-        report_types = [
+        available_report_types = [
             "html", "dynamic_top_matched_components", "xlsx",
             "spdx", "spdx_lite", "cyclone_dx", "string_match"
         ]
 
+        if 'ALL' in report_types:
+            report_types = available_report_types
+
         # Step 2: Generate and download reports
-        if report_type == "ALL":
-            for rpt_type in report_types:
-                logging.info(f"Generating {rpt_type} report...")
-                process_queue_id, generation_process_id = generate_report(api_url, api_username, api_token, scan_code, rpt_type)
-                logging.info(f"Report generation started. Process ID: {process_queue_id}")
-
-                # Check for report generation completion
-                logging.info(f"Checking {rpt_type} Report Generation Status...")
-                report_status = check_scan_status(api_url, api_username, api_token, scan_code, process_id=generation_process_id)
-                while report_status['status'] != 'FINISHED':
-                    logging.info(f"Report generation status: {report_status['status']}, waiting to complete...")
-                    time.sleep(check_interval)  # Wait for check_interval seconds before checking again
-                    report_status = check_scan_status(api_url, api_username, api_token, scan_code, process_id=generation_process_id)
-                logging.info(f"{rpt_type} report generated.")
-
-                # Download report
-                logging.info(f"Downloading {rpt_type} report...")
-                download_report(api_url, api_username, api_token, scan_code, process_queue_id, rpt_type)
-        else:
+        for rpt_type in report_types:
             logging.info(f"Generating {rpt_type} report...")
-            process_queue_id, generation_process_id = generate_report(api_url, api_username, api_token, scan_code, report_type)
+            process_queue_id, generation_process_id = generate_report(api_url, api_username, api_token, scan_code, rpt_type)
             logging.info(f"Report generation started. Process ID: {process_queue_id}")
 
-            # Step 3: Check for report generation completion
+            # Check for report generation completion
             logging.info(f"Checking {rpt_type} Report Generation Status...")
             report_status = check_scan_status(api_url, api_username, api_token, scan_code, process_id=generation_process_id)
             while report_status['status'] != 'FINISHED':
-                logging.info(f" {rpt_type} Report generation status: {report_status['status']}, waiting to complete...")
+                logging.info(f"Report generation status: {report_status['status']}, waiting to complete...")
                 time.sleep(check_interval)  # Wait for check_interval seconds before checking again
                 report_status = check_scan_status(api_url, api_username, api_token, scan_code, process_id=generation_process_id)
-            logging.info(f"{rpt_type} Report generation completed.")
+            logging.info(f"{rpt_type} report generated.")
 
-            # Step 4: Download report
+            # Download report
             logging.info(f"Downloading {rpt_type} report...")
-            download_report(api_url, api_username, api_token, scan_code, process_queue_id, report_type)
+            download_report(api_url, api_username, api_token, scan_code, process_queue_id, rpt_type)
 
     except Exception as e:
         logging.error(f"An error occurred: {str(e)}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Check scan status, generate and download report.')
+    parser = argparse.ArgumentParser(
+        description='Check scan status, generate and download report.',
+        epilog='Example: python script.py --scan-code SCAN123 --report-types xlsx spdx',
+        formatter_class=argparse.RawTextHelpFormatter
+    )
     parser.add_argument('--workbench-url', type=str, help='The Workbench API URL')
     parser.add_argument('--workbench-user', type=str, help='Your Workbench username')
     parser.add_argument('--workbench-token', type=str, help='Your Workbench API token')
     parser.add_argument('--scan-code', type=str, required=True, help='The scan code to check the status for')
-    parser.add_argument('--report-type', type=str, default='ALL', help='The type of report to generate (default: ALL)')
+    parser.add_argument('--report-types', type=str, nargs='+', default=['ALL'], help='The types of reports to generate (default: ALL)\nSupported types: html, dynamic_top_matched_components, xlsx, spdx, spdx_lite, cyclone_dx, string_match')
     parser.add_argument('--check-interval', type=int, default=30, help='Interval in seconds to check the status (default: 30)')
 
     args = parser.parse_args()
@@ -183,4 +172,4 @@ if __name__ == "__main__":
         logging.info("The Workbench URL, username, and token must be provided either as arguments or environment variables.")
         exit(1)
     
-    main(api_url, api_username, api_token, args.scan_code, args.report_type, args.check_interval)
+    main(api_url, api_username, api_token, args.scan_code, args.report_types, args.check_interval)
