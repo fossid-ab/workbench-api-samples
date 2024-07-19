@@ -56,6 +56,30 @@ def quick_scan(
     return make_api_call(scan_url, payload)
 
 
+def format_scan_result(result_data: Dict[str, Any], quick_view_link: str) -> str:
+    """Format the scan result for display"""
+    component = result_data.get("component")
+    match_type = result_data.get("type")
+    if component:
+        artifact = component.get("artifact")
+        author = component.get("author")
+        if match_type == "file":
+            return (
+                f"This entire file seems to originate from the {artifact} "
+                f"repository by {author}. Drop this file into the Quick View in Workbench for "
+                f"more information. You can access it here: {quick_view_link}"
+            )
+        if match_type == "partial":
+            remote_size = result_data["snippet"].get("remote_size")
+            return (
+                f"This file has {remote_size} lines that look like they're from "
+                f"{artifact} by {author}. Drop this file into the Quick View in Workbench for "
+                f"more information. You can access it here: {quick_view_link}"
+            )
+        return "Unknown match type."
+    return "No matches found."
+
+
 def main(
     scan_url: str, scan_user: str, scan_key: str, file_path: str, raw_output: bool
 ):
@@ -73,42 +97,17 @@ def main(
         logging.info("Performing quick scan...")
         scan_result = quick_scan(scan_url, scan_user, scan_key, file_content)
         if scan_result:
+            quick_view_link = (
+                scan_url.replace("/api.php", "")
+                + "/?form=main_interface&action=quickview"
+            )
             for result in scan_result:
                 result_data = json.loads(result)
                 if raw_output:
                     print(json.dumps(result_data, indent=2))
                 else:
-                    component = result_data.get("component")
-                    match_type = result_data.get("type")
-                    if component:
-                        artifact = component.get("artifact")
-                        author = component.get("author")
-                        quick_view_link = (
-                            scan_url.replace("/api.php", "")
-                            + "/?form=main_interface&action=quickview"
-                        )
-                        if match_type == "file":
-                            message = (
-                                f"This entire file seems to originate from the {artifact} "
-                                f"repository by {author}. "
-                                f"Drop this file into the Quick View in Workbench"
-                                f"for more information. You can access it here: "
-                                f"{quick_view_link}"
-                            )
-                        elif match_type == "partial":
-                            remote_size = result_data["snippet"].get("remote_size")
-                            message = (
-                                f"This file has {remote_size} lines that look like they're from "
-                                f"{artifact} by {author}. "
-                                f"Drop this file into the Quick View in Workbench "
-                                f"for more information. You can access it here: "
-                                f"{quick_view_link}"
-                            )
-                        else:
-                            message = "Unknown match type."
-                        logging.info(message)
-                    else:
-                        logging.info("No matches found.")
+                    message = format_scan_result(result_data, quick_view_link)
+                    logging.info(message)
         else:
             logging.info("No matches found.")
     except requests.exceptions.RequestException as e:
