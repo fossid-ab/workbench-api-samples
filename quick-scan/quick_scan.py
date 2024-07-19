@@ -39,21 +39,21 @@ def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def quick_scan(
-    scan_url: str, scan_user: str, scan_key: str, file_content: str
+    api_url: str, api_user: str, api_key: str, file_content: str
 ) -> Dict[str, Any]:
     """Perform the quick scan"""
     payload = {
         "group": "quick_scan",
         "action": "scan_one_file",
         "data": {
-            "username": scan_user,
-            "key": scan_key,
+            "username": api_user,
+            "key": api_key,
             "file_content": file_content,
             "limit": "1",
             "sensitivity": "10",
         },
     }
-    return make_api_call(scan_url, payload)
+    return make_api_call(api_url, payload)
 
 
 def format_scan_result(result_data: Dict[str, Any], quick_view_link: str) -> str:
@@ -81,12 +81,12 @@ def format_scan_result(result_data: Dict[str, Any], quick_view_link: str) -> str
 
 
 def main(
-    scan_url: str, scan_user: str, scan_key: str, file_path: str, raw_output: bool
+    api_url: str, api_user: str, api_key: str, file_path: str, raw_output: bool
 ):
     """Main function to perform the quick scan and print the results."""
     # Ensure the API URL ends with /api.php and doesn't contain it twice
-    if not scan_url.endswith("/api.php"):
-        scan_url = scan_url.rstrip("/") + "/api.php"
+    if not api_url.endswith("/api.php"):
+        api_url = api_url.rstrip("/") + "/api.php"
 
     # Read and encode the file content in base64
     with open(file_path, "rb") as file:
@@ -95,10 +95,10 @@ def main(
     try:
         # Perform the quick scan
         logging.info("Performing quick scan...")
-        scan_result = quick_scan(scan_url, scan_user, scan_key, file_content)
+        scan_result = quick_scan(api_url, api_user, api_key, file_content)
         if scan_result:
             quick_view_link = (
-                scan_url.replace("/api.php", "")
+                api_url.replace("/api.php", "")
                 + "/?form=main_interface&action=quickview"
             )
             for result in scan_result:
