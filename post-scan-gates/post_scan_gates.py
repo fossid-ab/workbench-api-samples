@@ -140,7 +140,7 @@ def check_pending_files(
             logging.info("View them in Workbench here: %s", links["scan_link"])
             if config["show_files"]:
                 logging.info("Pending files: %s", ", ".join(file_names))
-            exit(1)
+            sys.exit(1)
     logging.info("No files have Pending Identifications.")
 
 
@@ -168,7 +168,7 @@ def check_policy(api_url: str, config: Dict[str, Any], links: Dict[str, str]) ->
                         warning["findings"],
                     )
             logging.info("View them in Workbench here: %s", links["policy_link"])
-            exit(1)
+            sys.exit(1)
         logging.info("No policy violations found.")
 
 
@@ -223,7 +223,6 @@ def main():
             "The Workbench URL, username, and token must be provided "
             "either as arguments or environment variables."
         )
-
         sys.exit(1)
 
     api_url = validate_and_get_api_url(config["base_url"])
@@ -234,7 +233,7 @@ def main():
         logging.error(
             "Something went wrong - the Scan ID could not be extracted from the Scan Code."
         )
-        exit(1)
+        sys.exit(1)
     scan_id = scan_id_match.group()
     links = generate_links(base_url_for_link, scan_id)
 
@@ -244,7 +243,7 @@ def main():
         check_policy(api_url, config, links)
     except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
         logging.error("An error occurred: %s", str(e))
-        exit(1)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
