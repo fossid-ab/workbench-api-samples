@@ -1,8 +1,8 @@
 # FossID Workbench API Examples!
-These scripts were built by the FossID Customer Experience teams to solve specific use cases raised by customers.
+These scripts were built by the FossID Customer Experience teams in collaboration with Engineering to solve specific use cases raised by customers via the [FossID Support Portal](https://support.fossid.com/). 
 
 ## Example Scripts
-The repo contains the following scripts:
+The repo has scripts that help you:
 
 ### Archive Old Scans
 This script helps clients archive stale scans based on when they were last modified.
@@ -11,9 +11,9 @@ This script helps clients archive stale scans based on when they were last modif
 This script checks scans for Pending Identifications and Policy Violations - useful for gating CI/CD pipelines.
 
 ### Post Scan Reports
-This script downloads reports for a scan - useful if you want to include FossID reports with your build artifacts.
+This script downloads reports for a scan - useful if you want to include FossID reports as build artifacts.
 
-### Quick Scan
+### Quickly Scan a File
 This script scans a single file using the Quick Scan API - helpful for quickly knowing if AI-generated code should be investigated further.
 
 ## Disclaimers
