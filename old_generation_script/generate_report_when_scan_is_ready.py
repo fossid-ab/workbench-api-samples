@@ -55,8 +55,7 @@ def get_scan_status(host, username, key, scan_code, queue_id=None):
             "key": key,
             "scan_code": scan_code,
             "delay_response": "1",
-            "process_id": queue_id,
-            "type": 'REPORT_GENERATION'
+            "process_id": queue_id
         }
     }
     else:
@@ -75,17 +74,7 @@ def get_scan_status(host, username, key, scan_code, queue_id=None):
     # Validate scan status
     if results["status"] == "1":
         scan_status = results.get("data")
-        if queue_id:
-            print(f"Progress state : {scan_status['progress_state']}")
-            is_finished = (
-                    scan_status.get("progress_state") == "FAILED" or
-                    scan_status.get("progress_state") == "FINISHED"
-            )
-            if is_finished:
-                return scan_status
-            else:
-                return dict()
-        else:
+        if not queue_id:
             is_finished = (
                     scan_status.get("is_finished") or
                     scan_status.get("is_finished") == "1" or
@@ -96,7 +85,8 @@ def get_scan_status(host, username, key, scan_code, queue_id=None):
                 return scan_status
             else:
                 return dict()
-
+        else:
+            return scan_status
     if results["status"] == "0":
         if results.get("error") == "Classes.TableRepository.row_not_found":
             raise ScanNotFoundException("Scan code not found!")
@@ -242,12 +232,13 @@ def generate_report(host, username, key, scan_code, report_type=REPORT_TYPE[0], 
             scan_status = get_scan_status(host=host, username=username, key=key, scan_code=scan_code, queue_id=queue_id)
             if debug:
                 print(json.dumps({scan_code: scan_status}, indent=4))
-            if scan_status.get('progress_state') is not None:
-                progress_state = scan_status.get("progress_state", str())
-                if progress_state != 'FINISHED':
-                    raise APIException(f"Report was not generated successfully, status: {progress_state}") from Exception
-                elif progress_state == "FINISHED":
-                    break
+            process_message = scan_status.get("process_message", str())
+            progress_state = ""
+            if process_message:
+                process_message = json.loads(process_message)
+                progress_state = process_message.get("success_code")
+            if progress_state == "FINISHED":
+                break
             time.sleep(5)
         return download_report(username=username, key=key, report_type=report_type, api_server=host, queue_id=queue_id, use_download_group=use_download_group, debug=debug)
     except requests.exceptions.JSONDecodeError:
