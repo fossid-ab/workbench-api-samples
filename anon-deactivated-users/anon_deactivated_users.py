@@ -70,7 +70,7 @@ def main(api_base_url, api_username, api_token, dry_run):
         users = users_response.get("data", [])
         logging.debug(users_response.get("data", []))
         for user in users:
-            logging.info(user)
+            logging.debug(user)
             if user.get("is_deleted") == '1':  # Only add users that are deactivated
                 user_id = user.get("id")
                 updated_username = f"deactivated_{user_id}"
@@ -98,7 +98,7 @@ def main(api_base_url, api_username, api_token, dry_run):
 
             for user in users_to_update:
                 logging.info(f"Updating information for deactivated user: {user['original_username']}")
-                logging.info(f"the new username will be {user['updated_username']}")
+                #logging.info(f"the new username will be {user['updated_username']}")
                 update_response = update_user(api_url, api_username, api_token, 
                                               #user_username=user['updated_username'], 
                                               user_username=user['original_username'], 
@@ -106,7 +106,7 @@ def main(api_base_url, api_username, api_token, dry_run):
                                               user_surname="User", 
                                               user_email="deactivated@company.com", 
                                               user_password="deactivatedpassword")
-                logging.info(update_response)
+                logging.debug(update_response)
                 if update_response.get("status") == "1":
                     logging.info(f"Successfully updated user {user['original_username']} to {user['updated_username']}.")
                 else:
