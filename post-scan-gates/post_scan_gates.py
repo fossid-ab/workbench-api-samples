@@ -172,7 +172,9 @@ def check_policy(api_url: str, config: Dict[str, Any], links: Dict[str, str]) ->
         logging.info("No policy violations found.")
 
 
-def get_scan_information(api_url: str, username: str, token: str, scan_code: str) -> Dict[str, Any]:
+def get_scan_information(
+    api_url: str, username: str, token: str, scan_code: str
+) -> Dict[str, Any]:
     """Get scan information from the API."""
     payload = create_payload(username, token, scan_code, "get_information")
     return make_api_call(api_url, payload)
@@ -236,13 +238,15 @@ def main():
 
     try:
         # Get scan information
-        scan_info = get_scan_information(api_url, config["username"], config["token"], config["scan_code"])
+        scan_info = get_scan_information(
+            api_url, config["username"], config["token"], config["scan_code"]
+        )
         scan_id = scan_info.get("id")
-        
+
         if not scan_id:
             logging.error("Failed to retrieve scan ID from the API.")
             sys.exit(1)
-        
+
         links = generate_links(base_url_for_link, scan_id)
 
         wait_for_scan_completion(api_url, config)
