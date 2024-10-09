@@ -93,7 +93,7 @@ def validate_and_get_api_url(url: str) -> str:
     return url
 
 
-def generate_links(base_url: str, scan_id: str) -> Dict[str, str]:
+def generate_links(base_url: str, scan_id: int) -> Dict[str, str]:
     """Generate links for scan results."""
     return {
         "scan_link": (
@@ -172,6 +172,14 @@ def check_policy(api_url: str, config: Dict[str, Any], links: Dict[str, str]) ->
         logging.info("No policy violations found.")
 
 
+def get_scan_information(
+    api_url: str, username: str, token: str, scan_code: str
+) -> Dict[str, Any]:
+    """Get scan information from the API."""
+    payload = create_payload(username, token, scan_code, "get_information")
+    return make_api_call(api_url, payload)
+
+
 def main():
     """Main function to orchestrate scan checks."""
     parser = argparse.ArgumentParser(
@@ -228,16 +236,19 @@ def main():
     api_url = validate_and_get_api_url(config["base_url"])
     base_url_for_link = config["base_url"].replace("/api.php", "").rstrip("/")
 
-    scan_id_match = re.search(r"\d+$", config["scan_code"])
-    if not scan_id_match:
-        logging.error(
-            "Something went wrong - the Scan ID could not be extracted from the Scan Code."
-        )
-        sys.exit(1)
-    scan_id = scan_id_match.group()
-    links = generate_links(base_url_for_link, scan_id)
-
     try:
+        # Get scan information
+        scan_info = get_scan_information(
+            api_url, config["username"], config["token"], config["scan_code"]
+        )
+        scan_id = scan_info.get("id")
+
+        if not scan_id:
+            logging.error("Failed to retrieve scan ID from the API.")
+            sys.exit(1)
+
+        links = generate_links(base_url_for_link, scan_id)
+
         wait_for_scan_completion(api_url, config)
         check_pending_files(api_url, config, links)
         check_policy(api_url, config, links)
