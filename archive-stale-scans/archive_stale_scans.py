@@ -84,7 +84,7 @@ def archive_scan(url: str, username: str, token: str, scan_code: str) -> bool:
         "data": {"username": username, "key": token, "scan_code": scan_code},
     }
     try:
-        response = session.post(url, json=payload)
+        response = requests.post(url, json=payload)
         response.raise_for_status()
         return response.status_code == 200
     except requests.exceptions.RequestException as e:

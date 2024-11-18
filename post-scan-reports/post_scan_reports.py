@@ -131,7 +131,7 @@ class ApiClient:
                 "process_id": process_queue_id,
             },
         }
-        response = session.post(self.url, json=payload, timeout=120)
+        response = requests.post(self.url, json=payload, timeout=120)
         response.raise_for_status()
 
         file_extension = {
