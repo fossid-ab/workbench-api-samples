@@ -20,6 +20,7 @@ import re
 from typing import Dict, Any
 import sys
 import requests
+import helper_functions as hf
 
 # Constants
 API_ACTION_CHECK_STATUS = "check_status"
@@ -32,23 +33,23 @@ logging.basicConfig(
 )
 
 # Create a session object for making requests
-session = requests.Session()
+#session = requests.Session()
 
 
-def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Helper function to make API calls."""
-    try:
-        logging.debug("Making API call with payload: %s", json.dumps(payload, indent=2))
-        response = session.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        logging.debug("Received response: %s", response.text)
-        return response.json().get("data", {})
-    except requests.exceptions.RequestException as e:
-        logging.error("API call failed: %s", str(e))
-        raise
-    except json.JSONDecodeError as e:
-        logging.error("Failed to parse JSON response: %s", str(e))
-        raise
+#def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+#    """Helper function to make API calls."""
+#    try:
+#        logging.debug("Making API call with payload: %s", json.dumps(payload, indent=2))
+#        response = requests.post(url, json=payload, timeout=10)
+#        response.raise_for_status()
+#        logging.debug("Received response: %s", response.text)
+#        return response.json().get("data", {})
+#    except requests.exceptions.RequestException as e:
+#        logging.error("API call failed: %s", str(e))
+#        raise
+#    except json.JSONDecodeError as e:
+#        logging.error("Failed to parse JSON response: %s", str(e))
+#        raise
 
 
 def check_scan_status(
@@ -56,7 +57,7 @@ def check_scan_status(
 ) -> Dict[str, Any]:
     """Check the status of the scan."""
     payload = create_payload(username, token, scan_code, API_ACTION_CHECK_STATUS)
-    return make_api_call(api_url, payload)
+    return hf.make_api_call(api_url, payload)
 
 
 def check_pending_identifications(
@@ -64,7 +65,7 @@ def check_pending_identifications(
 ) -> Dict[str, Any]:
     """Check for pending identifications in the scan."""
     payload = create_payload(username, token, scan_code, API_ACTION_GET_PENDING_FILES)
-    return make_api_call(api_url, payload)
+    return hf.make_api_call(api_url, payload)
 
 
 def check_policy_violations(
@@ -72,7 +73,7 @@ def check_policy_violations(
 ) -> Dict[str, Any]:
     """Check for policy violations in the scan."""
     payload = create_payload(username, token, scan_code, API_ACTION_GET_POLICY_WARNINGS)
-    return make_api_call(api_url, payload)
+    return hf.make_api_call(api_url, payload)
 
 
 def create_payload(
@@ -177,7 +178,7 @@ def get_scan_information(
 ) -> Dict[str, Any]:
     """Get scan information from the API."""
     payload = create_payload(username, token, scan_code, "get_information")
-    return make_api_call(api_url, payload)
+    return hf.make_api_call(api_url, payload)
 
 
 def main():

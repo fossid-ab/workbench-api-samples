@@ -14,7 +14,7 @@ import logging
 import argparse
 import os
 from typing import Dict, Any, Tuple
-
+import helper_functions as hf
 import requests
 
 # Configure logging
@@ -23,7 +23,7 @@ logging.basicConfig(
 )
 
 # Create a session object for making requests
-session = requests.Session()
+#session = requests.Session()
 
 # List of all report types
 REPORT_TYPES = [
@@ -46,22 +46,22 @@ class ApiClient:
         self.username = username
         self.token = token
 
-    def make_api_call(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Helper function to make API calls."""
-        try:
-            logging.debug(
-                "Making API call with payload: %s", json.dumps(payload, indent=2)
-            )
-            response = session.post(self.url, json=payload, timeout=10)
-            response.raise_for_status()
-            logging.debug("Received response: %s", response.text)
-            return response.json().get("data", {})
-        except requests.exceptions.RequestException as e:
-            logging.error("API call failed: %s", str(e))
-            raise
-        except json.JSONDecodeError as e:
-            logging.error("Failed to parse JSON response: %s", str(e))
-            raise
+#    def make_api_call(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+#        """Helper function to make API calls."""
+#        try:
+#            logging.debug(
+#                "Making API call with payload: %s", json.dumps(payload, indent=2)
+#            )
+#            response = session.post(self.url, json=payload, timeout=10)
+#            response.raise_for_status()
+#            logging.debug("Received response: %s", response.text)
+#            return response.json().get("data", {})
+#        except requests.exceptions.RequestException as e:
+#            logging.error("API call failed: %s", str(e))
+#            raise
+#        except json.JSONDecodeError as e:
+#            logging.error("Failed to parse JSON response: %s", str(e))
+#            raise
 
     def check_scan_status(self, scan_code: str, process_id: str = None) -> Dict[str, Any]:
         """Check Workbench scan status."""

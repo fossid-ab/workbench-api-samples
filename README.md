@@ -19,6 +19,9 @@ This script downloads reports for a scan - useful if you want to include FossID 
 ### Quickly Scan a File
 This script scans a single file using the Quick Scan API - helpful for quickly knowing if AI-generated code should be investigated further.
 
+### Helper Functions
+This script contains helper functions that are used in the example scripts
+
 ## Contributing
 Contributions are welcome! We'll review any Pull Requests made.
 

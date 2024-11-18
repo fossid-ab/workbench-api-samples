@@ -12,6 +12,7 @@ import argparse
 import os
 from typing import Dict, Any
 import requests
+import helper_functions as hf
 
 # Configure logging
 logging.basicConfig(
@@ -19,23 +20,23 @@ logging.basicConfig(
 )
 
 # Create a session object for making requests
-session = requests.Session()
+#session = requests.Session()
 
 
-def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Helper function to make API calls."""
-    try:
-        logging.debug("Making API call with payload: %s", json.dumps(payload, indent=2))
-        response = session.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        logging.debug("Received response: %s", response.text)
-        return response.json().get("data", {})
-    except requests.exceptions.RequestException as e:
-        logging.error("API call failed: %s", str(e))
-        raise
-    except json.JSONDecodeError as e:
-        logging.error("Failed to parse JSON response: %s", str(e))
-        raise
+#def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+#    """Helper function to make API calls."""
+#    try:
+#        logging.debug("Making API call with payload: %s", json.dumps(payload, indent=2))
+#        response = requests.post(url, json=payload, timeout=10)
+#        response.raise_for_status()
+#        logging.debug("Received response: %s", response.text)
+#        return response.json().get("data", {})
+#    except requests.exceptions.RequestException as e:
+#        logging.error("API call failed: %s", str(e))
+#        raise
+#    except json.JSONDecodeError as e:
+#        logging.error("Failed to parse JSON response: %s", str(e))
+#        raise
 
 
 def quick_scan(
@@ -53,7 +54,7 @@ def quick_scan(
             "sensitivity": "10",
         },
     }
-    return make_api_call(api_url, payload)
+    return hf.make_api_call(api_url, payload)
 
 
 def format_scan_result(result_data: Dict[str, Any], quick_view_link: str) -> str:

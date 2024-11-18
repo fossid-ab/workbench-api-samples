@@ -3,22 +3,23 @@ import json
 import logging
 import argparse
 import os
+import helper_functions as hf
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Create a session object for making requests
-session = requests.Session()
+#session = requests.Session()
 
 # Helper function to make API calls
-def make_api_call(url: str, payload: dict) -> dict:
+"""def make_api_call(url: str, payload: dict) -> dict:
     try:
         response = session.post(url, json=payload)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         logging.error(f"API call failed: {e}")
-        raise
+        raise"""
 
 # Function to get all users
 def get_all_users(api_url, api_username, api_token):
@@ -31,8 +32,8 @@ def get_all_users(api_url, api_username, api_token):
             "include_deactivated": "1"
         }
     }
-    logging.debug(make_api_call(api_url, payload))
-    return make_api_call(api_url, payload)
+    logging.debug(hf.make_api_call(api_url, payload))
+    return hf.make_api_call(api_url, payload)
 
 # Function to update user information
 def update_user(api_url, api_username, api_token, user_username, user_name, user_surname, user_email, user_password):
@@ -49,7 +50,7 @@ def update_user(api_url, api_username, api_token, user_username, user_name, user
             "user_password": user_password
         }
     }
-    return make_api_call(api_url, payload)
+    return hf.make_api_call(api_url, payload)
 
 def main(api_base_url, api_username, api_token, dry_run):
     # Ensure the API URL ends with /api.php

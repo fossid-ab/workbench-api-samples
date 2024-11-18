@@ -13,7 +13,7 @@ import logging
 import argparse
 import os
 from typing import List, Tuple, Dict, Any
-
+import helper_functions as hf
 import requests
 from tabulate import tabulate
 
@@ -23,23 +23,23 @@ logging.basicConfig(
 )
 
 # Create a session object for making requests
-session = requests.Session()
+#session = requests.Session()
 
 
-def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Helper function to make API calls."""
-    try:
-        logging.debug("Making API call with payload: %s", json.dumps(payload, indent=2))
-        response = session.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        logging.debug("Received response: %s", response.text)
-        return response.json().get("data", {})
-    except requests.exceptions.RequestException as e:
-        logging.error("API call failed: %s", str(e))
-        raise
-    except json.JSONDecodeError as e:
-        logging.error("Failed to parse JSON response: %s", str(e))
-        raise
+#def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+#    """Helper function to make API calls."""
+#    try:
+#        logging.debug("Making API call with payload: %s", json.dumps(payload, indent=2))
+#        response = requests.post(url, json=payload, timeout=10)
+#        response.raise_for_status()
+#        logging.debug("Received response: %s", response.text)
+#        return response.json().get("data", {})
+#    except requests.exceptions.RequestException as e:
+#        logging.error("API call failed: %s", str(e))
+#        raise
+#    except json.JSONDecodeError as e:
+#        logging.error("Failed to parse JSON response: %s", str(e))
+#        raise
 
 
 def list_scans(url: str, username: str, token: str) -> Dict[str, Any]:
@@ -49,7 +49,7 @@ def list_scans(url: str, username: str, token: str) -> Dict[str, Any]:
         "action": "list_scans",
         "data": {"username": username, "key": token},
     }
-    return make_api_call(url, payload)
+    return hf.make_api_call(url, payload)
 
 
 def get_scan_info(
@@ -61,7 +61,7 @@ def get_scan_info(
         "action": "get_information",
         "data": {"username": username, "key": token, "scan_code": scan_code},
     }
-    return make_api_call(url, payload)
+    return hf.make_api_call(url, payload)
 
 
 def get_project_info(
@@ -73,7 +73,7 @@ def get_project_info(
         "action": "get_information",
         "data": {"username": username, "key": token, "project_code": project_code},
     }
-    return make_api_call(url, payload)
+    return hf.make_api_call(url, payload)
 
 
 def archive_scan(url: str, username: str, token: str, scan_code: str) -> bool:
