@@ -46,26 +46,18 @@ class ApiClient:
         self.username = username
         self.token = token
 
-    #Helper function to make API calls.
-    """def make_api_call(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        try:
-            logging.debug(
-                "Making API call with payload: %s", json.dumps(payload, indent=2)
-            )
-            response = session.post(self.url, json=payload, timeout=10)
-            response.raise_for_status()
-            logging.debug("Received response: %s", response.text)
-            return response.json().get("data", {})
-        except requests.exceptions.RequestException as e:
-            logging.error("API call failed: %s", str(e))
-            raise
-        except json.JSONDecodeError as e:
-            logging.error("Failed to parse JSON response: %s", str(e))
-            raise
-"""
-
     def check_scan_status(self, scan_code: str, process_id: str = None) -> Dict[str, Any]:
-        """Check Workbench scan status."""
+        """Check Workbench scan status.
+        
+        Parameters:
+            self(ApiClient): The instance of the API client to check the scan status of.
+            scan_code(str): The code that identifies the scan to check.
+            process_id(str): The process id if one is needed.
+        
+        Returns:
+            A dicitonary of the data returned from the check scan api call.
+        """
+
         payload = {
             "group": "scans",
             "action": "check_status",
@@ -76,12 +68,23 @@ class ApiClient:
                 "delay_response": "1",
             },
         }
+
         if process_id:
             payload["data"]["process_id"] = process_id
         return self.make_api_call(payload)
 
     def generate_report(self, scan_code: str, report_type: str) -> Tuple[str, str]:
-        """Generate Workbench report."""
+        """Generate Workbench report.
+        
+        Parameters:
+            self(ApiClient): The instance of the API client to cgenerate a report on.
+            scan_code(str): The code that identifies the scan to use.
+            report_type(str): The type of report to generate.
+        
+        Returns:
+            A tuple of the data returned from the generate report api call.
+        """
+
         payload = {
             "group": "scans",
             "action": "generate_report",
@@ -95,13 +98,22 @@ class ApiClient:
                 "async": "1",
             },
         }
+
         response_data = self.make_api_call(payload)
         return response_data.get("process_queue_id"), response_data.get(
             "generation_process", {}
         ).get("id")
 
     def create_output_dir(self, output_dir: str) -> str:
-        """Create the output directory if it doesn't exist."""
+        """Create the output directory if it doesn't exist.
+        
+        Parameters:
+            self(ApiClient): The instance of the API client to cretea the output dictionary of.
+            output_dir(str):  The output directory for the scan and its reports.
+        
+        Returns:
+            The updated output directory.
+        """
         if output_dir and not os.path.isdir(output_dir):
             try:
                 os.makedirs(output_dir, exist_ok=True)
@@ -118,10 +130,17 @@ class ApiClient:
                 output_dir = ""
         return output_dir
 
-    def download_report(
-        self, scan_code: str, process_queue_id: str, report_type: str, output_dir: str
-    ) -> None:
-        """Download report. If output_dir is set it will save it to that path."""
+    def download_report(self, scan_code: str, process_queue_id: str, report_type: str, output_dir: str) -> None:
+        """Downloads report. If output_dir is set it will save it to that path.
+        
+        Parameters:
+            self(ApiClient): The instance of the API client to download a report of.
+            scan_code(str): The code that identifies the scan.
+            process_queue_id(str): The process id if one is needed.
+            report_type(str): The type of report to download.
+            output_dir(str):  The output directory for the scan and its reports.
+        """
+
         payload = {
             "group": "download",
             "action": "download_report",
@@ -132,6 +151,7 @@ class ApiClient:
                 "process_id": process_queue_id,
             },
         }
+
         response = requests.post(self.url, json=payload, timeout=120)
         response.raise_for_status()
 
@@ -147,6 +167,7 @@ class ApiClient:
 
         file_name = f"{scan_code}_{report_type}_report.{file_extension}"
         output_dir = self.create_output_dir(output_dir)
+
         if output_dir:
             try:
                 file_name = os.path.join(output_dir, file_name)
@@ -154,6 +175,7 @@ class ApiClient:
                 logging.error(
                     "Error joining output dir with filename: %s | %s", output_dir, str(ex)
                 )
+
         contents = self.process_report_contents(response, report_type)
         mode = "w" if isinstance(contents, str) else "wb"
         with open(file_name, mode, encoding="utf-8" if mode == "w" else None) as f:
@@ -161,7 +183,14 @@ class ApiClient:
         logging.info("Report downloaded and saved as %s", file_name)
 
     def process_report_contents(self, response, report_type: str):
-        """Process report contents based on report type."""
+        """Process report contents based on report type.
+        
+        Parameters:
+            self(ApiClient): The instance of the API client to process reports of.
+            response(JSON): The response from the api call made.
+            report_type(str): The type of report to download.
+        """
+
         contents = response.content
         if report_type == "dynamic_top_matched_components":
             try:
@@ -177,19 +206,23 @@ class ApiClient:
                 )
         return contents
 
-def process_report_type(
-    client: ApiClient,
-    scan_code: str,
-    report_type: str,
-    check_interval: int,
-    output_dir: str,
-) -> None:
-    """Process report type for the scan."""
+def process_report_type(client: ApiClient,scan_code: str,report_type: str,check_interval: int,output_dir: str,) -> None:
+    """Process report type for the scan.
+    
+    Parameters:
+        client(ApiClient): The instance of the API client to download a report of.
+        scan_code(str): The code that identifies the scan.
+        report_type(str): The type of report to download.
+        check_interval(int) The amount of time to sleep before checking the scan status again.:
+        output_dir(str):  The output directory for the scan and its reports.
+    """
+
     logging.info("Generating %s report...", report_type)
     process_queue_id, generation_process_id = client.generate_report(scan_code, report_type)
     logging.info("Report generation started. Process ID: %s", process_queue_id)
     logging.info("Checking %s Report Generation Status...", report_type)
     report_status = client.check_scan_status(scan_code, process_id=generation_process_id)
+    
     while report_status["status"] != "FINISHED":
         logging.info(
             "Report generation status: %s, waiting to complete...",
@@ -197,14 +230,21 @@ def process_report_type(
         )
         time.sleep(check_interval)
         report_status = client.check_scan_status(scan_code, process_id=generation_process_id)
+    
     logging.info("%s Report generation completed.", report_type)
     logging.info("Downloading %s report...", report_type)
     client.download_report(scan_code, process_queue_id, report_type, output_dir)
 
 def main(config_data: Dict[str, Any]) -> None:
-    """Main function to check scan status, generate and download report."""
+    """Main function to check scan status, generate and download report.
+    
+    Parameters:
+        config_data(Dict[str, Any]): The data needed to check scan status and make reports.
+    """
+
     client = ApiClient(config_data["url"], config_data["username"], config_data["token"])
     try:
+
         logging.info("Checking Scan: %s Status...", config_data["scan_code"])
         scan_status = client.check_scan_status(config_data["scan_code"])
         while scan_status["status"] != "FINISHED":
@@ -226,6 +266,7 @@ def main(config_data: Dict[str, Any]) -> None:
                 client, config_data["scan_code"], config_data["report_type"],
                 config_data["check_interval"], config_data["output_dir"]
             )
+
     except requests.exceptions.RequestException as e:
         logging.error("A requests exception occurred: %s", str(e))
     except json.JSONDecodeError as e:
@@ -234,6 +275,8 @@ def main(config_data: Dict[str, Any]) -> None:
         logging.error("An OS error occurred: %s", str(e))
 
 if __name__ == "__main__":
+    """Sets up the arugments."""
+    
     parser = argparse.ArgumentParser(
         description="Check scan status, generate and download report.",
         epilog="Example: python script.py --scan-code SCAN123 --report-types xlsx spdx",

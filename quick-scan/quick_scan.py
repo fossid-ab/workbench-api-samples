@@ -19,26 +19,18 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-#Helper function to make API calls.
-"""def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    try:
-        logging.debug("Making API call with payload: %s", json.dumps(payload, indent=2))
-        response = requests.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        logging.debug("Received response: %s", response.text)
-        return response.json().get("data", {})
-    except requests.exceptions.RequestException as e:
-        logging.error("API call failed: %s", str(e))
-        raise
-    except json.JSONDecodeError as e:
-        logging.error("Failed to parse JSON response: %s", str(e))
-        raise
-"""
-
-def quick_scan(
-    api_url: str, api_user: str, api_key: str, file_content: str
-) -> Dict[str, Any]:
-    """Perform the quick scan"""
+def quick_scan(api_url: str, api_user: str, api_key: str, file_content: str) -> Dict[str, Any]:
+    """Performs the quick scan.
+    
+    Parameters:
+        api_url(str): the url to access the api.
+        api_user(str): the username to access the fossid api.
+        api_key(str): the required key to access the fossid api.
+        file_path(str): the path to the required file content to peform the scan on.
+    
+    Returns:
+        A dictionary of the api response to the quick scan.
+    """
     payload = {
         "group": "quick_scan",
         "action": "scan_one_file",
@@ -52,21 +44,33 @@ def quick_scan(
     }
     return hf.make_api_call(api_url, payload)
 
-
 def format_scan_result(result_data: Dict[str, Any], quick_view_link: str) -> str:
-    """Format the scan result for display"""
+    """Format the scan result for display.
+    
+    Parameters:
+        result_data(Dict[str, Any]): The data returned from the quick scan api call.
+        quick_view_link(str): A link that gives a view of the scanned file.
+    
+    Returns:
+        A string with scan result data and links to access it if the scan worked as intended.
+    """
+
     component = result_data.get("component")
     match_type = result_data.get("type")
+    
     if component:
+
         artifact = component.get("artifact")
         author = component.get("author")
         if match_type == "file":
+
             return (
                 f"This entire file seems to originate from the {artifact} "
                 f"repository by {author}. Drop this file into the Quick View in Workbench for "
                 f"more information. You can access it here: {quick_view_link}"
             )
         if match_type == "partial":
+
             remote_size = result_data["snippet"].get("remote_size")
             return (
                 f"This file has {remote_size} lines that look like they're from "
@@ -76,11 +80,16 @@ def format_scan_result(result_data: Dict[str, Any], quick_view_link: str) -> str
         return "Unknown match type."
     return "No matches found."
 
+def main(api_url: str, api_user: str, api_key: str, file_path: str, raw_output: bool):
+    """Main function to perform the quick scan and print the results.
+    
+    Parameters:
+        api_url(str): the url to access the api.
+        api_user(str): the username to access the fossid api.
+        api_key(str): the required key to access the fossid api.
+        file_path(str): the path to the required file content to peform the scan on.
+    """
 
-def main(
-    api_url: str, api_user: str, api_key: str, file_path: str, raw_output: bool
-):
-    """Main function to perform the quick scan and print the results."""
     # Ensure the API URL ends with /api.php and doesn't contain it twice
     if not api_url.endswith("/api.php"):
         api_url = api_url.rstrip("/") + "/api.php"
@@ -116,6 +125,7 @@ def main(
 
 
 if __name__ == "__main__":
+    """Sets up the arugments."""
     parser = argparse.ArgumentParser(
         description="Perform a quick scan of a single file."
     )

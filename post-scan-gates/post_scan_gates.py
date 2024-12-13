@@ -32,50 +32,65 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-#Helper function to make API calls
-"""def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    try:
-        logging.debug("Making API call with payload: %s", json.dumps(payload, indent=2))
-        response = requests.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        logging.debug("Received response: %s", response.text)
-        return response.json().get("data", {})
-    except requests.exceptions.RequestException as e:
-        logging.error("API call failed: %s", str(e))
-        raise
-    except json.JSONDecodeError as e:
-        logging.error("Failed to parse JSON response: %s", str(e))
-        raise
-"""
+def check_scan_status(api_url: str, username: str, token: str, scan_code: str) -> Dict[str, Any]:
+    """Checks the status of the scan.
+    
+    Parameters:
+        api_url(str): The url to access the api.
+        username(str): The username to use for the api.
+        token(str): The required token to access the api.
+        scan_code(str): The code to identify the scan to check.
 
-def check_scan_status(
-    api_url: str, username: str, token: str, scan_code: str
-) -> Dict[str, Any]:
-    """Check the status of the scan."""
+    Returns:
+        The response from the scan api call.
+    """
     payload = create_payload(username, token, scan_code, API_ACTION_CHECK_STATUS)
     return hf.make_api_call(api_url, payload)
 
 
-def check_pending_identifications(
-    api_url: str, username: str, token: str, scan_code: str
-) -> Dict[str, Any]:
-    """Check for pending identifications in the scan."""
+def check_pending_identifications(api_url: str, username: str, token: str, scan_code: str) -> Dict[str, Any]:
+    """Checks for pending identifications in the scan.
+    
+    Parameters:
+        api_url(str): The url to access the api.
+        username(str): The username to use for the api.
+        token(str): The required token to access the api.
+        scan_code(str): The code to identify the scan to check.
+
+    Returns:
+        The response from the api call.
+    """
     payload = create_payload(username, token, scan_code, API_ACTION_GET_PENDING_FILES)
     return hf.make_api_call(api_url, payload)
 
 
-def check_policy_violations(
-    api_url: str, username: str, token: str, scan_code: str
-) -> Dict[str, Any]:
-    """Check for policy violations in the scan."""
+def check_policy_violations(api_url: str, username: str, token: str, scan_code: str) -> Dict[str, Any]:
+    """Checks for policy violations in the scan.
+    
+    Parameters:
+        api_url(str): The url to access the api.
+        username(str): The username to use for the api.
+        token(str): The required token to access the api.
+        scan_code(str): The code to identify the scan to check.
+
+    Returns:
+        The response from the api call."""
     payload = create_payload(username, token, scan_code, API_ACTION_GET_POLICY_WARNINGS)
     return hf.make_api_call(api_url, payload)
 
 
-def create_payload(
-    username: str, token: str, scan_code: str, action: str
-) -> Dict[str, Any]:
-    """Create payload for API calls."""
+def create_payload(username: str, token: str, scan_code: str, action: str) -> Dict[str, Any]:
+    """Create payload for API calls.
+    
+    Parameters:
+        username(str): The username to use for the api.
+        token(str): The required token to access the api.
+        scan_code(str): The code to identify the scan to check.
+        action(str): The given action to input into the payload for the api to do.
+
+    Returns:
+        The payload dictionary to use.
+    """
     return {
         "group": "scans",
         "action": action,
@@ -84,14 +99,29 @@ def create_payload(
 
 
 def validate_and_get_api_url(url: str) -> str:
-    """Validate and construct the API URL."""
+    """Validate and construct the API URL.
+    
+    Parameters:
+        url(str): The url to access the api.
+
+    Returns:
+        The validated URL
+    """
     if not url.endswith("/api.php"):
         return url.rstrip("/") + "/api.php"
     return url
 
 
 def generate_links(base_url: str, scan_id: int) -> Dict[str, str]:
-    """Generate links for scan results."""
+    """Generate links for scan results.
+    
+    Parameters:
+        base_url(str): The url to access the api.
+        scan_id(int): the ID of the scan to create links for.
+
+    Returns:
+        A dictionary containing all the links of scan results.
+    """
     return {
         "scan_link": (
             f"{base_url}/index.html?form=main_interface&action=scanview&sid={scan_id}"
@@ -105,11 +135,16 @@ def generate_links(base_url: str, scan_id: int) -> Dict[str, str]:
 
 
 def wait_for_scan_completion(api_url: str, config: Dict[str, Any]) -> None:
-    """Wait for the scan to complete."""
+    """Wait for the scan to complete.
+    
+    Parameters:
+        api_url(str): The url to access the api.
+        config(Dict[str, Any]): contains the username, token and scan coded needed to check the intended scan.
+    """
+
     logging.info("Checking Scan Status...")
-    scan_status = check_scan_status(
-        api_url, config["username"], config["token"], config["scan_code"]
-    )
+    scan_status = check_scan_status(api_url, config["username"], config["token"], config["scan_code"])
+
     while scan_status.get("status") != "FINISHED":
         logging.info(
             "Scan status: %s, waiting to complete...",
@@ -122,14 +157,20 @@ def wait_for_scan_completion(api_url: str, config: Dict[str, Any]) -> None:
     logging.info("The Scan completed!")
 
 
-def check_pending_files(
-    api_url: str, config: Dict[str, Any], links: Dict[str, str]
-) -> None:
-    """Check for pending files and exit if any are found."""
+def check_pending_files(api_url: str, config: Dict[str, Any], links: Dict[str, str]) -> None:
+    """Check for pending files and exit if any are found.
+    
+    Parameters:
+        api_url(str): The url to access the api.
+        config(Dict[str, Any]): contains the username, token and scan coded needed to check the intended scan.
+        links(Dict[str, str]): Contains the links to use to get scan results
+    """
+
     logging.info("Checking if any files have Pending Identifications...")
     pending_files = check_pending_identifications(
         api_url, config["username"], config["token"], config["scan_code"]
     )
+
     if pending_files:
         file_names = list(pending_files.values())
         if file_names:
@@ -138,20 +179,32 @@ def check_pending_files(
             if config["show_files"]:
                 logging.info("Pending files: %s", ", ".join(file_names))
             sys.exit(1)
+
     logging.info("No files have Pending Identifications.")
 
 
 def check_policy(api_url: str, config: Dict[str, Any], links: Dict[str, str]) -> None:
-    """Check for policy violations and exit if any are found."""
+    """Checks for policy violations and exit if any are found.
+    
+    Parameters:
+        api_url(str): The url to access the api.
+        config(Dict[str, Any]): contains the username, token and scan coded needed to check the intended scan.
+        links(Dict[str, str]): Contains the links to use to get scan results
+    """
+
     if config["policy_check"]:
+
         logging.info("Checking if any files introduce policy violations...")
         policy_violations = check_policy_violations(
             api_url, config["username"], config["token"], config["scan_code"]
         )
         policy_warnings = policy_violations.get("policy_warnings_list", [])
+
         if policy_warnings:
+
             logging.info("Policy violations found!")
             for warning in policy_warnings:
+
                 if warning.get("license_id"):
                     logging.info(
                         "License Violation: %s - %s files",
@@ -168,17 +221,24 @@ def check_policy(api_url: str, config: Dict[str, Any], links: Dict[str, str]) ->
             sys.exit(1)
         logging.info("No policy violations found.")
 
-
-def get_scan_information(
-    api_url: str, username: str, token: str, scan_code: str
-) -> Dict[str, Any]:
-    """Get scan information from the API."""
+def get_scan_information(api_url: str, username: str, token: str, scan_code: str) -> Dict[str, Any]:
+    """Retrieves all the scan information from the API.
+    
+    Parameters:
+        api_url(str): The url to access the api.
+        username(str): The username to use for the api.
+        token(str): The required token to access the api.
+        scan_code(str): The code to identify the scan to check.
+    
+    Returns:
+        The api response from the fossid workbench.
+    """
     payload = create_payload(username, token, scan_code, "get_information")
     return hf.make_api_call(api_url, payload)
 
-
 def main():
     """Main function to orchestrate scan checks."""
+    
     parser = argparse.ArgumentParser(
         description=(
             "Check scan status and pending identifications, "
