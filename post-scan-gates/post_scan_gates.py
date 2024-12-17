@@ -32,8 +32,8 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-def check_scan_status(api_url: str, username: str, token: str, scan_code: str) -> Dict[str, Any]:
-    """Checks the status of the scan.
+def check(api_url: str, username: str, token: str, scan_code: str, action: str) -> Dict[str, Any]:
+    """Checks the given action of the given scan code.
     
     Parameters:
         api_url(str): The url to access the api.
@@ -44,40 +44,8 @@ def check_scan_status(api_url: str, username: str, token: str, scan_code: str) -
     Returns:
         The response from the scan api call.
     """
-    payload = create_payload(username, token, scan_code, API_ACTION_CHECK_STATUS)
+    payload = create_payload(username, token, scan_code, action)
     return hf.make_api_call(api_url, payload)
-
-
-def check_pending_identifications(api_url: str, username: str, token: str, scan_code: str) -> Dict[str, Any]:
-    """Checks for pending identifications in the scan.
-    
-    Parameters:
-        api_url(str): The url to access the api.
-        username(str): The username to use for the api.
-        token(str): The required token to access the api.
-        scan_code(str): The code to identify the scan to check.
-
-    Returns:
-        The response from the api call.
-    """
-    payload = create_payload(username, token, scan_code, API_ACTION_GET_PENDING_FILES)
-    return hf.make_api_call(api_url, payload)
-
-
-def check_policy_violations(api_url: str, username: str, token: str, scan_code: str) -> Dict[str, Any]:
-    """Checks for policy violations in the scan.
-    
-    Parameters:
-        api_url(str): The url to access the api.
-        username(str): The username to use for the api.
-        token(str): The required token to access the api.
-        scan_code(str): The code to identify the scan to check.
-
-    Returns:
-        The response from the api call."""
-    payload = create_payload(username, token, scan_code, API_ACTION_GET_POLICY_WARNINGS)
-    return hf.make_api_call(api_url, payload)
-
 
 def create_payload(username: str, token: str, scan_code: str, action: str) -> Dict[str, Any]:
     """Create payload for API calls.
@@ -143,7 +111,7 @@ def wait_for_scan_completion(api_url: str, config: Dict[str, Any]) -> None:
     """
 
     logging.info("Checking Scan Status...")
-    scan_status = check_scan_status(api_url, config["username"], config["token"], config["scan_code"])
+    scan_status = check(api_url, config["username"], config["token"], config["scan_code"], API_ACTION_CHECK_STATUS)
 
     while scan_status.get("status") != "FINISHED":
         logging.info(
@@ -151,8 +119,8 @@ def wait_for_scan_completion(api_url: str, config: Dict[str, Any]) -> None:
             scan_status.get("status", "UNKNOWN"),
         )
         time.sleep(config["interval"])
-        scan_status = check_scan_status(
-            api_url, config["username"], config["token"], config["scan_code"]
+        scan_status = check(
+            api_url, config["username"], config["token"], config["scan_code"], API_ACTION_CHECK_STATUS
         )
     logging.info("The Scan completed!")
 
@@ -167,8 +135,8 @@ def check_pending_files(api_url: str, config: Dict[str, Any], links: Dict[str, s
     """
 
     logging.info("Checking if any files have Pending Identifications...")
-    pending_files = check_pending_identifications(
-        api_url, config["username"], config["token"], config["scan_code"]
+    pending_files = check(
+        api_url, config["username"], config["token"], config["scan_code"], API_ACTION_GET_PENDING_FILES
     )
 
     if pending_files:
@@ -195,8 +163,8 @@ def check_policy(api_url: str, config: Dict[str, Any], links: Dict[str, str]) ->
     if config["policy_check"]:
 
         logging.info("Checking if any files introduce policy violations...")
-        policy_violations = check_policy_violations(
-            api_url, config["username"], config["token"], config["scan_code"]
+        policy_violations = check(
+            api_url, config["username"], config["token"], config["scan_code"], API_ACTION_GET_POLICY_WARNINGS
         )
         policy_warnings = policy_violations.get("policy_warnings_list", [])
 
@@ -238,7 +206,7 @@ def get_scan_information(api_url: str, username: str, token: str, scan_code: str
 
 def main():
     """Main function to orchestrate scan checks."""
-    
+
     parser = argparse.ArgumentParser(
         description=(
             "Check scan status and pending identifications, "

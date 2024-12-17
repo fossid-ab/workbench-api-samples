@@ -18,12 +18,7 @@ import helper_functions as hf
 import requests
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
-# Create a session object for making requests
-#session = requests.Session()
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # List of all report types
 REPORT_TYPES = [
@@ -37,9 +32,7 @@ REPORT_TYPES = [
 ]
 
 class ApiClient:
-    """
-    This class represents an API client for making requests to the FossID Workbench API.
-    """
+    """This class represents an API client for making requests to the FossID Workbench API."""
 
     def __init__(self, url: str, username: str, token: str):
         self.url = url
@@ -276,7 +269,7 @@ def main(config_data: Dict[str, Any]) -> None:
 
 if __name__ == "__main__":
     """Sets up the arugments."""
-    
+
     parser = argparse.ArgumentParser(
         description="Check scan status, generate and download report.",
         epilog="Example: python script.py --scan-code SCAN123 --report-types xlsx spdx",

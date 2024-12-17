@@ -117,9 +117,11 @@ def main(api_url: str, api_user: str, api_key: str, file_path: str, raw_output: 
         else:
             logging.info("No matches found.")
     except requests.exceptions.RequestException as e:
+
         logging.error("API call failed: %s", str(e))
         sys.exit(1)
     except json.JSONDecodeError as e:
+        
         logging.error("Failed to parse JSON response: %s", str(e))
         sys.exit(1)
 
