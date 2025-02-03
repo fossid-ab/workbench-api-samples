@@ -104,6 +104,9 @@ def generate_links(base_url: str, scan_id: int) -> Dict[str, str]:
             f"{base_url}/index.html?form=main_interface&action=scanview&sid={scan_id}"
             f"&current_view=mark_as_identified"
         ),
+        "main_scan_link": (
+            f"{base_url}/index.html?form=main_interface&action=scanview&sid={scan_id}"
+        ),
     }
 
 
@@ -248,6 +251,9 @@ def main():
             sys.exit(1)
 
         links = generate_links(base_url_for_link, scan_id)
+        
+        # Print the main scan URL for Jenkins to capture
+        print(f"\nFOSSID_SCAN_URL={links['main_scan_link']}\n")
 
         wait_for_scan_completion(api_url, config)
         check_pending_files(api_url, config, links)
