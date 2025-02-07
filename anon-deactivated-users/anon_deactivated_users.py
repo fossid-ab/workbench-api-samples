@@ -3,45 +3,56 @@ import json
 import logging
 import argparse
 import os
+import helper_functions as hf
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Create a session object for making requests
-session = requests.Session()
+def get_all_users(url, username, token):
+    """  Gets all users in the system
 
-# Helper function to make API calls
-def make_api_call(url: str, payload: dict) -> dict:
-    try:
-        response = session.post(url, json=payload)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        logging.error(f"API call failed: {e}")
-        raise
+    Parameters:
+        url(str): The link to acess the api.
+        username(str): The username to use to access the api.
+        token(str): The token required to access the api.
 
-# Function to get all users
-def get_all_users(api_url, api_username, api_token):
+    Returns:
+        A dictionary with every user.
+    """
     payload = {
         "group": "users",
         "action": "get_all_users",
         "data": {
-            "username": api_username,
-            "key": api_token,
+            "username": username,
+            "key": token,
             "include_deactivated": "1"
         }
     }
-    logging.debug(make_api_call(api_url, payload))
-    return make_api_call(api_url, payload)
+    logging.debug(hf.make_api_call(url, payload))
+    return hf.make_api_call(url, payload)
 
-# Function to update user information
-def update_user(api_url, api_username, api_token, user_username, user_name, user_surname, user_email, user_password):
+def update_user(url, username, token, user_username, user_name, user_surname, user_email, user_password):
+    """Updates the user information based on the given data from the parameters.
+
+    Parameters:
+        url(str): The link to access to the api.
+        username(str): The username to use to access the api.
+        token(str): The token required to access the api.
+        user_username(str): The username of the user to update.
+        user_name(str): The updated name for the username.
+        user_surname(str): The updated surname for the username.
+        user_email(str): The updated email for the username.
+        user_password(str): The updated password for the username.
+
+    Returns:
+        A dictionary with updated data on the user.
+    """
     payload = {
         "group": "users",
         "action": "update",
         "data": {
-            "username": api_username,
-            "key": api_token,
+            "username": username,
+            "key": token,
             "user_username": user_username,
             "user_name": user_name,
             "user_surname": user_surname,
@@ -49,9 +60,17 @@ def update_user(api_url, api_username, api_token, user_username, user_name, user
             "user_password": user_password
         }
     }
-    return make_api_call(api_url, payload)
+    return hf.make_api_call(url, payload)
 
 def main(api_base_url, api_username, api_token, dry_run):
+    """The main functionality of the script. Anonimizes users who have been deactivated
+    
+    Parameters:
+        api_base_url(str): The base url for the FOSSID workbench.
+        api_username(str): The username to use to access the api.
+        api_token(str): The required token to access the api.
+        dry_run(boolean): True if a dry run was requested.
+    """
     # Ensure the API URL ends with /api.php
     if not api_base_url.endswith('/api.php'):
         api_url = api_base_url.rstrip('/') + '/api.php'
@@ -80,6 +99,7 @@ def main(api_base_url, api_username, api_token, dry_run):
                     "updated_username": updated_username
                 })
 
+        #Performes the dry run and then returns before anonimizing any users.
         if dry_run:
             if users_to_update:
                 logging.info("Dry Run enabled! The following users would be updated:")
@@ -117,6 +137,7 @@ def main(api_base_url, api_username, api_token, dry_run):
     except Exception as e:
         logging.error(f"An error occurred: {e}")
 
+#sets up the arugments to run the script
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Anonymize deactivated users in Workbench.')
     parser.add_argument('--workbench-url', type=str, help='The Workbench API URL')
@@ -134,4 +155,5 @@ if __name__ == "__main__":
         logging.error("The Workbench URL, username, and token must be provided either as arguments or environment variables.")
         exit(1)
 
+    #calls the main function to run the script and anonimize deactivited users
     main(api_base_url, api_username, api_token, args.dry_run)
