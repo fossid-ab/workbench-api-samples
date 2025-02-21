@@ -16,7 +16,7 @@ def delete_scan(url: str, username: str, token: str, scan_code: str) -> bool:
     """Delete a scan."""
     payload = {
         "group": "scans",
-        "action": "delete_scan",
+        "action": "delete",
         "data": {"username": username, "key": token, "scan_code": scan_code},
     }
     try:
