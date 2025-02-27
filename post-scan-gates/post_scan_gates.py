@@ -112,13 +112,13 @@ def generate_links(base_url: str, scan_id: int) -> Dict[str, str]:
 
 def wait_for_scan_completion(api_url: str, config: Dict[str, Any]) -> None:
     """Wait for the scan to complete."""
-    logging.info("Checking Scan Status...")
+    logging.info("Checking if the Scan is running...")
     scan_status = check_scan_status(
         api_url, config["username"], config["token"], config["scan_code"]
     )
     while scan_status.get("status") != "FINISHED":
         logging.info(
-            "Scan status: %s, waiting to complete...",
+            "Scan Running: %s, waiting on completion...",
             scan_status.get("status", "UNKNOWN"),
         )
         time.sleep(config["interval"])
@@ -130,7 +130,7 @@ def wait_for_scan_completion(api_url: str, config: Dict[str, Any]) -> None:
 
 def check_pending_files(
     api_url: str, config: Dict[str, Any], links: Dict[str, str]
-) -> None:
+) -> bool:
     """Check for pending files and exit if any are found."""
     logging.info("Checking if any files have Pending Identifications...")
     pending_files = check_pending_identifications(
@@ -139,18 +139,21 @@ def check_pending_files(
     if pending_files:
         file_names = list(pending_files.values())
         if file_names:
-            logging.info("Files with Pending Identifications found!")
-            logging.info("View them in Workbench here: %s", links["scan_link"])
+            logging.info("This scan has Files with Pending Identifications.")
             if config["show_files"]:
-                logging.info("Pending files: %s", ", ".join(file_names))
-            sys.exit(1)
+                logging.info("Files to Review: %s", ", ".join(file_names))
+            logging.info(
+                "Review and Identify them in Workbench here: %s", links["scan_link"]
+            )
+            return True
     logging.info("No files have Pending Identifications.")
+    return False
 
 
-def check_policy(api_url: str, config: Dict[str, Any], links: Dict[str, str]) -> None:
-    """Check for policy violations and exit if any are found."""
+def check_policy(api_url: str, config: Dict[str, Any], links: Dict[str, str]) -> bool:
+    """Check for policy violations and return True if any are found."""
     if config["policy_check"]:
-        logging.info("Checking if any files introduce policy violations...")
+        logging.info("Checking for Policy Warnings...")
         policy_violations = check_policy_violations(
             api_url, config["username"], config["token"], config["scan_code"]
         )
@@ -170,9 +173,12 @@ def check_policy(api_url: str, config: Dict[str, Any], links: Dict[str, str]) ->
                         warning["license_category"],
                         warning["findings"],
                     )
-            logging.info("View them in Workbench here: %s", links["policy_link"])
-            sys.exit(1)
+            logging.info(
+                "View Files with Warnings in Workbench here: %s", links["policy_link"]
+            )
+            return True
         logging.info("No policy violations found.")
+    return False
 
 
 def get_scan_information(
@@ -182,6 +188,11 @@ def get_scan_information(
     payload = create_payload(username, token, scan_code, "get_information")
     return make_api_call(api_url, payload)
 
+
+def set_env_variable(name: str, value: str):
+    """Sets an environment variable."""
+    os.environ[name] = value
+    logging.info(f"Setting the environment variable '{name}'.")
 
 def main():
     """Main function to orchestrate scan checks."""
@@ -238,7 +249,7 @@ def main():
 
     api_url = validate_and_get_api_url(config["base_url"])
     base_url_for_link = config["base_url"].replace("/api.php", "").rstrip("/")
-
+    exit_code = 0  # Initialize exit_code to 0 (success)
     try:
         # Get scan information
         scan_info = get_scan_information(
@@ -251,16 +262,22 @@ def main():
             sys.exit(1)
 
         links = generate_links(base_url_for_link, scan_id)
-        
-        # Print the main scan URL for Jenkins to capture
+
+        # print the scan URL and set it as an environment variable for future job steps
         print(f"\nFOSSID_SCAN_URL={links['main_scan_link']}\n")
+        set_env_variable("FOSSID_SCAN_URL", links["main_scan_link"])
 
         wait_for_scan_completion(api_url, config)
-        check_pending_files(api_url, config, links)
-        check_policy(api_url, config, links)
+        if check_pending_files(api_url, config, links):
+            exit_code = 1  # Set exit_code to 1 if pending files are found
+        if check_policy(api_url, config, links):
+            exit_code = 1  # Set exit_code to 1 if policy violations are found
+
     except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
         logging.error("An error occurred: %s", str(e))
         sys.exit(1)
+
+    sys.exit(exit_code)  # Exit with the appropriate code
 
 
 if __name__ == "__main__":
