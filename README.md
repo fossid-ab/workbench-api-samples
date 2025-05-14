@@ -19,6 +19,9 @@ This script downloads reports for a scan - useful if you want to include FossID 
 ### Quickly Scan a File
 This script scans a single file using the Quick Scan API - helpful for quickly knowing if AI-generated code should be investigated further.
 
+### Import Dependency Analysis
+This script imports dependency analysis results to an existing scan - useful for adding dependency analysis results from running ORT or FossID-DA in a pipeline to your scans.
+
 ## Contributing
 Contributions are welcome! We'll review any Pull Requests made.
 
