@@ -4,10 +4,7 @@ This script retrieves license policy information for a Workbench project and sav
 
 ## Purpose
 
-The script connects to the Workbench API and fetches detailed policy information for a specified project. This is useful for:
-- Retrieving a project's license policy configuration
-- Backing up policy settings
-- Exporting policy information for reporting or compliance purposes
+The script connects to the Workbench API and fetches detailed policy information for a specified project. This is useful for retrieving the project license policy to use with the Diff Scanner.
 
 ## Setting Up
 
@@ -40,8 +37,8 @@ The script will save the policy information to a file named `.fossidpolicy` in t
 
 ### Custom Output File
 
-You can specify a custom output file name:
+If not running from the repository root, you can use `--output-file` to send the policy file to a specific place.
 
 ```python
-python3 get_project_policy.py --project-code "company/project-name" --output-file "my-policy.json"
+python3 get_project_policy.py --project-code "company/project-name" --output-file "${{ github.workspace }}/.fossidpolicy"
 ``` 
