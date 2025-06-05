@@ -105,8 +105,8 @@ def find_old_scans(
         if scan_details["is_archived"]:
             continue
         project_code = scan_details.get("project_code")
-        if project_code and project_code in ignored_projects:
-            logging.info("Ignoring scan %s from ignored project code %s", scan_code, project_code)
+        if project_code and any(project_code.startswith(prefix) for prefix in preserve_projects):
+            logging.info("Ignoring scan %s from project code starting with %s", scan_code, project_code)
             continue
         creation_date = datetime.strptime(scan_details["created"], "%Y-%m-%d %H:%M:%S")
         update_date = datetime.strptime(scan_details["updated"], "%Y-%m-%d %H:%M:%S")
@@ -172,7 +172,7 @@ def delete_scans(
             logging.error("Failed to delete scan: %s", scan_name)
 
 
-def main(url: str, username: str, token: str, days: int, dry_run: bool, ingored_projects: list[str]):
+def main(url: str, username: str, token: str, days: int, dry_run: bool, preserve_projects: list[str]):
     """Main function to delete old scans."""
     old_scans = fetch_and_find_old_scans(url, username, token, days)
     if not old_scans:
