@@ -265,6 +265,7 @@ def main():
 
         # print the scan URL and set it as an environment variable for future job steps
         print(f"\nFOSSID_SCAN_URL={links['main_scan_link']}\n")
+        print("Note: You need to be signed in to FossID Workbench to access the link above, otherwise you will see a spinning loading indicator.")
         set_env_variable("FOSSID_SCAN_URL", links["main_scan_link"])
 
         wait_for_scan_completion(api_url, config)
