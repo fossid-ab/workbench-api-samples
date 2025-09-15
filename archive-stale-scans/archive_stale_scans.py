@@ -20,7 +20,6 @@ import os
 from typing import List, Tuple, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
-
 import requests
 
 # Configure logging
@@ -32,6 +31,10 @@ logging.basicConfig(
 RECORDS_PER_PAGE = 100  # Number of records to fetch per page from the API
 MAX_WORKERS = 10       # Maximum number of concurrent API requests
 BATCH_SIZE = 50        # Number of scans to process concurrently in each batch
+DEFAULT_DAYS = 365     # Default age threshold for stale scans
+DEFAULT_PLAN_FILE = "archive_plan.json"  # Default plan file name
+API_TIMEOUT = 10       # API request timeout in seconds
+BATCH_DELAY = 0.1      # Delay between batches in seconds
 
 # Create a session object for making requests
 session = requests.Session()
@@ -40,12 +43,32 @@ session = requests.Session()
 project_cache: Dict[str, Dict[str, Any]] = {}
 
 
+def validate_and_get_credentials(args) -> Tuple[str, str, str]:
+    """Validate and return API credentials from args or environment."""
+    api_url = args.workbench_url or os.getenv("WORKBENCH_URL")
+    api_username = args.workbench_user or os.getenv("WORKBENCH_USER")
+    api_token = args.workbench_token or os.getenv("WORKBENCH_TOKEN")
+
+    if not api_url or not api_username or not api_token:
+        logging.error(
+            "Workbench URL, username, and token must be provided as arguments "
+            "or environment variables."
+        )
+        sys.exit(1)
+
+    # Sanity check for Workbench URL
+    if not api_url.endswith("/api.php"):
+        api_url += "/api.php"
+
+    return api_url, api_username, api_token
+
+
 def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Helper function to make API calls."""
     try:
         logging.debug("Making API call with payload: %s",
                       json.dumps(payload, indent=2))
-        response = session.post(url, json=payload, timeout=10)
+        response = session.post(url, json=payload, timeout=API_TIMEOUT)
         response.raise_for_status()
         logging.debug("Received response: %s", response.text)
         return response.json().get("data", {})
@@ -217,7 +240,7 @@ def find_old_scans(
 
         # Add a small delay between batches to be nice to the API
         if i + BATCH_SIZE < total_scans:
-            time.sleep(0.1)
+            time.sleep(BATCH_DELAY)
 
     logging.info("Found %d old scans out of %d total scans",
                  len(old_scans), total_scans)
@@ -341,7 +364,6 @@ def archive_scans_from_plan(
     for i, scan_entry in enumerate(plan, 1):
         scan_code = scan_entry["scan_code"]
         scan_name = scan_entry["scan_name"]
-        project_name = scan_entry["project_name"]
         
         logging.info("(%d/%d) Archiving...", i, total_scans)
         
@@ -435,8 +457,8 @@ Commands:
   archive  Archive scans based on a JSON plan file
 
 Examples:
-  python archive_stale_scans.py plan --days 365 --output scans_to_archive.json
-  python archive_stale_scans.py archive --input scans_to_archive.json
+  python archive_stale_scans.py plan --days 365
+  python archive_stale_scans.py archive
         """
     )
     
@@ -457,13 +479,13 @@ Examples:
         help="Create a plan of scans to be archived"
     )
     plan_parser.add_argument(
-        "--days", type=int, default=365,
-        help="Scan age in days to consider old (default: 365)"
+        "--days", type=int, default=DEFAULT_DAYS,
+        help=f"Scan age in days to consider old (default: {DEFAULT_DAYS})"
     )
     plan_parser.add_argument(
-        "--output", "-o", type=str, default="archive_plan.json",
-        help="Output JSON file for the archive plan "
-             "(default: archive_plan.json)"
+        "--output", "-o", type=str, default=DEFAULT_PLAN_FILE,
+        help=f"Output JSON file for the archive plan "
+             f"(default: {DEFAULT_PLAN_FILE})"
     )
     
     # Archive command
@@ -472,8 +494,8 @@ Examples:
         help="Archive scans based on a plan file"
     )
     archive_parser.add_argument(
-        "--input", "-i", type=str, default="archive_plan.json",
-        help="Input JSON plan file to execute (default: archive_plan.json)"
+        "--input", "-i", type=str, default=DEFAULT_PLAN_FILE,
+        help=f"Input JSON plan file to execute (default: {DEFAULT_PLAN_FILE})"
     )
     
     args = parser.parse_args()
@@ -482,21 +504,8 @@ Examples:
         parser.print_help()
         sys.exit(1)
 
-    # Get API credentials
-    api_url = args.workbench_url or os.getenv("WORKBENCH_URL")
-    api_username = args.workbench_user or os.getenv("WORKBENCH_USER")
-    api_token = args.workbench_token or os.getenv("WORKBENCH_TOKEN")
-
-    if not api_url or not api_username or not api_token:
-        logging.error(
-            "Workbench URL, username, and token must be provided as arguments "
-            "or environment variables."
-        )
-        sys.exit(1)
-
-    # Sanity check for Workbench URL
-    if not api_url.endswith("/api.php"):
-        api_url += "/api.php"
+    # Get and validate API credentials
+    api_url, api_username, api_token = validate_and_get_credentials(args)
 
     # Execute the appropriate command
     if args.command == "plan":
