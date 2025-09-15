@@ -3,4 +3,3 @@ python-dotenv
 pycodestyle
 pylint
 black
-tabulate
