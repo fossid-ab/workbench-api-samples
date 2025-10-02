@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 import logging
 import argparse
 import os
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any, Optional, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import requests
@@ -28,8 +28,8 @@ logging.basicConfig(
 )
 
 # Configuration constants
-RECORDS_PER_PAGE = 100  # Number of records to fetch per page from the API
-MAX_WORKERS = 10       # Maximum number of concurrent API requests
+RECORDS_PER_PAGE = 100  # Number of records to fetch per page from the List_Scans API
+MAX_WORKERS = 10       # Maximum number of concurrent API requests for getting scan info
 BATCH_SIZE = 50        # Number of scans to process concurrently in each batch
 DEFAULT_DAYS = 365     # Default age threshold for stale scans
 DEFAULT_PLAN_FILE = "archive_plan.json"  # Default plan file name
@@ -41,6 +41,96 @@ session = requests.Session()
 
 # Global cache for project information to avoid redundant API calls
 project_cache: Dict[str, Dict[str, Any]] = {}
+
+
+class SmartSampler:
+    """Encapsulate the smart sampling algorithm for better testability and maintainability."""
+    
+    def __init__(self, batch_size: int = BATCH_SIZE, max_workers: int = MAX_WORKERS):
+        self.batch_size = batch_size
+        self.max_workers = max_workers
+    
+    def calculate_indices(self, total_scans: int) -> List[int]:
+        """Calculate indices using scalable sampling approach.
+        
+        Sampling strategy:
+        - 0-99 scans: Process all (no sampling)
+        - 100-999 scans: 10 samples  
+        - 1,000-9,999 scans: 100 samples
+        - 10,000-99,999 scans: 1,000 samples
+        - And so on... (grows in powers of 10)
+        
+        This maintains ~2% sampling rate while scaling efficiently.
+        """
+        if total_scans == 0:
+            return []
+        
+        if total_scans < 100:
+            # For small datasets, process all scans (minimal overhead)
+            return list(range(total_scans))
+        
+        # Calculate number of samples: 10^(floor(log10(total_scans)) - 1)
+        import math
+        num_samples = 10 ** (int(math.log10(total_scans)) - 1)
+        
+        # Ensure we don't exceed the dataset size
+        num_samples = min(num_samples, total_scans)
+        
+        # Distribute samples evenly across the dataset
+        indices = []
+        for i in range(num_samples):
+            idx = int((i / (num_samples - 1)) * (total_scans - 1)) if num_samples > 1 else total_scans // 2
+            if idx not in indices:
+                indices.append(idx)
+        
+        return sorted(indices)
+    
+    
+    def identify_ranges(self, sample_ages: List[Tuple[int, bool, datetime]], 
+                                  total_scans: int) -> List[Tuple[int, int]]:
+        """Determine ranges to process based on sample analysis."""
+        sample_ages.sort(key=lambda x: x[0])  # Sort by position
+        
+        ranges_to_process = []
+        current_start = None
+        
+        for pos, is_old, _ in sample_ages:
+            if is_old and current_start is None:
+                current_start = pos
+            elif not is_old and current_start is not None:
+                ranges_to_process.append((current_start, pos))
+                current_start = None
+        
+        # Handle case where old scans go to the end
+        if current_start is not None:
+            ranges_to_process.append((current_start, total_scans))
+        
+        return self._extend_and_merge_ranges(ranges_to_process, total_scans)
+    
+    def _extend_and_merge_ranges(self, ranges: List[Tuple[int, int]], 
+                                total_scans: int) -> List[Tuple[int, int]]:
+        """Extend ranges with buffer and merge overlapping ranges."""
+        if not ranges:
+            return ranges
+        
+        # Extend ranges with 5% buffer
+        extended_ranges = []
+        for start, end in ranges:
+            buffer = max(50, int((end - start) * 0.05))
+            safe_start = max(0, start - buffer)
+            safe_end = min(total_scans, end + buffer)
+            extended_ranges.append((safe_start, safe_end))
+        
+        # Merge overlapping ranges
+        merged_ranges = [extended_ranges[0]]
+        for start, end in extended_ranges[1:]:
+            last_start, last_end = merged_ranges[-1]
+            if start <= last_end:
+                merged_ranges[-1] = (last_start, max(last_end, end))
+            else:
+                merged_ranges.append((start, end))
+        
+        return merged_ranges
 
 
 def validate_and_get_credentials(args) -> Tuple[str, str, str]:
@@ -177,53 +267,195 @@ def get_scan_info_batch(
 
 
 def find_old_scans(
-    scans: Dict[str, Any], url: str, username: str, token: str, days: int
-) -> List[Tuple[Optional[str], str, str, datetime, datetime]]:
-    """Find scans that were last updated before the specified days.
-    Uses concurrent processing for improved performance.
+    scans: Dict[str, Any], url: str, username: str, token: str, days: int,
+    progress_callback: Optional[Callable[[str, int, int], None]] = None
+) -> Dict[str, Any]:
+    """Intelligently sample scans to identify promising subsets for processing.
+    
+    For small datasets (<100 scans): Returns all scans (no sampling risk)
+    For large datasets: Uses scalable sampling to identify ranges with old scans
+    
+    Args:
+        scans: Dictionary of scan data
+        url: API URL  
+        username: API username
+        token: API token
+        days: Age threshold in days
+        progress_callback: Optional callback function(stage, current, total)
+        
+    Returns:
+        Dictionary of scans to process (either all scans or optimized subset)
     """
-    old_scans = []
-    time_limit = datetime.now() - timedelta(days=days)
-
-    # Process scans in batches to avoid memory issues and enable concurrency
     scan_items = list(scans.items())
     total_scans = len(scan_items)
+    
+    # Handle empty dataset
+    if total_scans == 0:
+        return {}
+    
+    # For small datasets, return all scans (no sampling needed)
+    if total_scans < 100:
+        logging.info("Small dataset: processing all %d scans directly", total_scans)
+        return scans
+    
+    # For large datasets, use smart sampling to identify promising ranges
+    logging.info("Large dataset: using smart sampling to optimize processing...")
+    
+    sampler = SmartSampler()
+    time_limit = datetime.now() - timedelta(days=days)
+    
+    # Sample the dataset
+    sample_indices = sampler.calculate_indices(total_scans)
+    sample_codes = [scan_items[i][1]["code"] for i in sample_indices]
+    
+    if progress_callback:
+        progress_callback("sampling_dataset", 0, len(sample_codes))
+    
+    sampling_rate = (len(sample_codes) / total_scans) * 100
+    logging.info("Sampling %d scans (%.2f%% of dataset)", len(sample_codes), sampling_rate)
+    
+    # Get details for samples
+    if progress_callback:
+        progress_callback("fetching_samples", 0, len(sample_codes))
+    
+    sample_details = get_scan_info_batch(url, username, token, sample_codes)
+    
+    if progress_callback:
+        progress_callback("fetching_samples", len(sample_codes), len(sample_codes))
+    
+    # Analyze samples to find old/new patterns
+    sample_ages = []
+    for i, scan_code in enumerate(sample_codes):
+        if scan_code in sample_details:
+            try:
+                scan_details = sample_details[scan_code]
+                if not scan_details.get("is_archived"):
+                    update_date = datetime.strptime(
+                        scan_details["updated"], "%Y-%m-%d %H:%M:%S")
+                    is_old = update_date < time_limit
+                    sample_ages.append((sample_indices[i], is_old, update_date))
+            except (KeyError, ValueError):
+                continue
+    
+    if not sample_ages:
+        logging.warning("No valid samples found, processing all scans")
+        return scans
+    
+    # Identify promising ranges based on samples
+    if progress_callback:
+        progress_callback("identifying_ranges", 0, 1)
+    
+    ranges_to_process = sampler.identify_ranges(sample_ages, total_scans)
+    
+    if not ranges_to_process:
+        if any(is_old for _, is_old, _ in sample_ages):
+            ranges_to_process = [(0, total_scans // 2)]
+            logging.info("No clear ranges found, processing first half as fallback")
+        else:
+            logging.info("No old scans detected in samples")
+            return {}
+    
+    # Show optimization results
+    total_to_process = sum(end - start for start, end in ranges_to_process)
+    reduction_percent = ((total_scans - total_to_process - len(sample_codes)) / total_scans) * 100
+    
+    print(f"\n🚀 Smart Sampling Optimization Results:")
+    print(f"   📊 Total samples taken: {len(sample_codes):,}")
+    print(f"   🎯 Identified {len(ranges_to_process)} promising ranges containing {total_to_process:,} scans")
+    print(f"   ⚡ Processing {(total_to_process / total_scans) * 100:.1f}% of total scans ({reduction_percent:.1f}% reduction)")
+    
+    if reduction_percent > 0:
+        saved_width = int(30 * (reduction_percent / 100))
+        process_width = 30 - saved_width
+        optimization_bar = "🟩" * process_width + "⬜" * saved_width
+        print(f"   📈 Optimization: [{optimization_bar}] {reduction_percent:.1f}% API calls saved")
+    print()
+    
+    # Build filtered scan dictionary with only the promising ranges
+    filtered_scans = {}
+    for start, end in ranges_to_process:
+        for i in range(start, end):
+            scan_key, scan_data = scan_items[i]
+            filtered_scans[scan_key] = scan_data
+    
+    logging.info("Smart sampling complete: filtered to %d scans for processing", len(filtered_scans))
+    return filtered_scans
 
-    logging.info("Processing %d scans in batches of %d with %d workers",
-                 total_scans, BATCH_SIZE, MAX_WORKERS)
+
+def process_scans(
+    scans: Dict[str, Any], url: str, username: str, token: str, days: int,
+    progress_callback: Optional[Callable[[str, int, int], None]] = None
+) -> List[Tuple[Optional[str], str, str, datetime, datetime]]:
+    """Process scans to find those older than the specified days.
+    
+    This function does the actual work of checking scan ages and filtering.
+    It can work with any scan dictionary (full dataset or pre-filtered subset).
+    
+    Args:
+        scans: Dictionary of scan data to process
+        url: API URL
+        username: API username  
+        token: API token
+        days: Age threshold in days
+        progress_callback: Optional callback function(stage, current, total)
+        
+    Returns:
+        List of old scans with their details
+    """
+    if not scans:
+        if progress_callback:
+            progress_callback("completed", 0, 0)
+        return []
+    
+    scan_items = list(scans.items())
+    total_scans = len(scan_items)
+    time_limit = datetime.now() - timedelta(days=days)
+    
+    logging.info("Processing %d scans to find old entries...", total_scans)
+    
+    if progress_callback:
+        progress_callback("processing_ranges", 0, total_scans)
+    
+    old_scans = []
+    processed = 0
+    
+    # Process scans in batches
     for i in range(0, total_scans, BATCH_SIZE):
         batch = scan_items[i:i + BATCH_SIZE]
         scan_codes = [scan_info["code"] for _, scan_info in batch]
-
-        logging.info("Processing batch %d/%d (%d scans)",
-                     i // BATCH_SIZE + 1,
-                     (total_scans + BATCH_SIZE - 1) // BATCH_SIZE,
-                     len(scan_codes))
-
+        
+        processed += len(scan_codes)
+        
+        # Update progress callback
+        if progress_callback:
+            progress_callback("processing_ranges", processed, total_scans)
+        
+        if processed % 1000 == 0 or processed == total_scans:
+            logging.info("Progress: %d/%d scans processed (%.1f%%)",
+                         processed, total_scans, (processed / total_scans) * 100)
+        
         # Fetch scan details concurrently for this batch
-        scan_details_batch = get_scan_info_batch(
-                url, username, token, scan_codes)
-
+        scan_details_batch = get_scan_info_batch(url, username, token, scan_codes)
+        
         # Process the results
         for _, scan_info in batch:
             scan_code = scan_info["code"]
-
+            
             if scan_code not in scan_details_batch:
-                logging.warning("Failed to get details for scan %s, skipping",
-                                scan_code)
                 continue
-
+                
             scan_details = scan_details_batch[scan_code]
-
+            
             # Skip archived scans
             if scan_details.get("is_archived"):
                 continue
-
+                
             try:
                 creation_date = datetime.strptime(
                     scan_details["created"], "%Y-%m-%d %H:%M:%S")
                 update_date = datetime.strptime(
                     scan_details["updated"], "%Y-%m-%d %H:%M:%S")
+                
                 if update_date < time_limit:
                     project_code = scan_details.get("project_code")
                     old_scans.append((
@@ -237,13 +469,16 @@ def find_old_scans(
                 logging.warning("Invalid date format for scan %s: %s",
                                 scan_code, str(e))
                 continue
-
-        # Add a small delay between batches to be nice to the API
+        
+        # Add delay between batches
         if i + BATCH_SIZE < total_scans:
             time.sleep(BATCH_DELAY)
-
-    logging.info("Found %d old scans out of %d total scans",
-                 len(old_scans), total_scans)
+    
+    logging.info("Processing complete: found %d old scans", len(old_scans))
+    
+    if progress_callback:
+        progress_callback("completed", len(old_scans), len(old_scans))
+    
     return old_scans
 
 
@@ -284,7 +519,7 @@ def create_scan_plan(
             except Exception as e:
                 logging.warning(
                     "Failed to fetch project info for %s: %s",
-                    project_code, str(e))
+                               project_code, str(e))
                 project_name = f"Project {project_code}"
 
         scan_entry = {
@@ -332,6 +567,53 @@ def load_plan_from_file(filename: str) -> List[Dict[str, Any]]:
         sys.exit(1)
 
 
+def progress_display(stage: str, current: int, total: int) -> None:
+    """Terminal-optimized progress display with visual progress bars."""
+    if total == 0:
+        percentage = 100
+    else:
+        percentage = (current / total) * 100
+    
+    stage_messages = {
+        "sampling_dataset": "📊 Sampling dataset",
+        "fetching_samples": "📥 Fetching sample data",
+        "identifying_ranges": "🎯 Identifying processing ranges",
+        "processing_ranges": "⚡ Processing scan ranges",
+        "fallback_processing": "🔄 Processing all scans (fallback)",
+        "completed": "✅ Completed"
+    }
+    
+    message = stage_messages.get(stage, stage)
+    
+    # Create a visual progress bar for terminal
+    if total > 0:
+        bar_width = 30
+        filled_width = int(bar_width * (current / total))
+        bar = "█" * filled_width + "░" * (bar_width - filled_width)
+        
+        # Use \r to overwrite the line for smooth progress updates
+        if stage == "processing_ranges" and current < total:
+            # For processing ranges, use overwrite for smooth updates
+            print(f"\r{message}: [{bar}] {current:,}/{total:,} ({percentage:.1f}%)", 
+                  end="", flush=True)
+        else:
+            # For other stages, print new line
+            if current == total or stage != "processing_ranges":
+                print(f"\r{message}: [{bar}] {current:,}/{total:,} ({percentage:.1f}%)")
+            else:
+                print(f"\r{message}: [{bar}] {current:,}/{total:,} ({percentage:.1f}%)", 
+                      end="", flush=True)
+    else:
+        print(f"{message}: Complete")
+    
+    # Add extra logging for key milestones
+    if stage == "completed":
+        print(f"\n🎉 Found {current:,} old scans ready for archiving!")
+    elif stage == "identifying_ranges" and current == total:
+        # This gets called after range identification
+        pass  # We'll let the main algorithm log the optimization results
+
+
 def fetch_and_find_old_scans(
     url: str, username: str, token: str, days: int
 ) -> List[Tuple[Optional[str], str, str, datetime, datetime]]:
@@ -347,8 +629,13 @@ def fetch_and_find_old_scans(
     logging.info("Found %d total scans", len(scans))
     logging.info("Finding scans last updated more than %d days ago...", days)
 
-    return find_old_scans(
-            scans, url, username, token, days)
+    # Step 1: Use smart sampling to filter the scan set
+    filtered_scans = find_old_scans(
+        scans, url, username, token, days, progress_display)
+    
+    # Step 2: Process the filtered scans to find old ones
+    return process_scans(
+        filtered_scans, url, username, token, days, progress_display)
 
 
 def archive_scans_from_plan(
@@ -388,16 +675,18 @@ def cmd_plan(url: str, username: str, token: str, days: int, output_file: str):
     """Create a plan of scans to be archived."""
     start_time = time.time()
     
-    logging.info("Creating archive plan for scans older than %d days...", days)
+    print(f"\n🔍 Creating archive plan for scans older than {days} days...")
+    print("=" * 60)
     
     old_scans = fetch_and_find_old_scans(url, username, token, days)
     if not old_scans:
-        logging.info("No scans found older than %d days.", days)
+        print(f"\n📋 No scans found older than {days} days.")
         # Still create an empty plan file
         save_plan_to_file([], output_file)
+        print(f"📄 Empty plan saved to: {output_file}")
         return
     
-    logging.info("Found %d scans to be archived", len(old_scans))
+    print(f"\n📊 Creating detailed plan for {len(old_scans):,} scans...")
     
     # Create detailed plan with project information
     plan = create_scan_plan(old_scans, url, username, token)
@@ -406,44 +695,72 @@ def cmd_plan(url: str, username: str, token: str, days: int, output_file: str):
     save_plan_to_file(plan, output_file)
     
     processing_time = time.time() - start_time
-    logging.info("Plan creation completed in %.2f seconds", processing_time)
-
-    # Display completion message
-    logging.info(
-        "Archive plan created at %s. Please review the scans that will be "
-        "archived then run the script with the archive command to finish "
-        "the operation.", output_file
-    )
+    
+    # Display completion message with visual formatting
+    print(f"\n✅ Plan Creation Complete!")
+    print("=" * 60)
+    print(f"📄 Archive plan: {output_file}")
+    print(f"📊 Scans to archive: {len(plan):,}")
+    print(f"⏱️  Processing time: {processing_time:.2f} seconds")
+    print(f"\n💡 Next steps:")
+    print(f"   1. Review the plan: cat {output_file}")
+    print(f"   2. Execute archiving: python {__file__.split('/')[-1]} archive")
+    print("=" * 60)
 
 
 def cmd_archive(url: str, username: str, token: str, plan_file: str):
     """Archive scans based on a plan file."""
     start_time = time.time()
 
-    logging.info("Loading archive plan from %s...", plan_file)
+    print(f"\n📂 Loading archive plan from {plan_file}...")
+    print("=" * 60)
+    
     plan = load_plan_from_file(plan_file)
     
     if not plan:
-        logging.info("No scans to archive (empty plan).")
+        print("📋 No scans to archive (empty plan).")
         return
 
-    logging.info("Loaded plan with %d scans to archive", len(plan))
+    print(f"📊 Loaded plan with {len(plan):,} scans to archive")
+    
+    # Show a summary of what will be archived
+    if len(plan) <= 10:
+        print(f"\n📋 Scans to be archived:")
+        for i, scan in enumerate(plan[:10], 1):
+            print(f"   {i}. {scan['scan_name']} ({scan['project_name']}) - {scan['age_days']} days old")
+    else:
+        print(f"\n📋 Sample of scans to be archived:")
+        for i, scan in enumerate(plan[:5], 1):
+            print(f"   {i}. {scan['scan_name']} ({scan['project_name']}) - {scan['age_days']} days old")
+        print(f"   ... and {len(plan) - 5:,} more scans")
     
     # Confirm operation
-    confirmation = input(
-        f"\nThis will archive {len(plan)} scans. "
-        f"This operation is irreversible. Proceed? (y/n): ")
+    print(f"\n⚠️  WARNING: This will archive {len(plan):,} scans.")
+    print("   This operation is IRREVERSIBLE!")
+    confirmation = input(f"\n❓ Proceed with archiving? (y/n): ")
+    
     if confirmation.lower() != "y":
-        logging.info("Operation cancelled.")
+        print("❌ Operation cancelled.")
         return
+
+    print(f"\n🚀 Starting archive operation...")
+    print("=" * 60)
 
     # Perform archiving
     success = archive_scans_from_plan(url, username, token, plan)
 
     total_time = time.time() - start_time
-    logging.info("Archive operation completed in %.2f seconds", total_time)
     
-    if not success:
+    if success:
+        print(f"\n✅ Archive Operation Complete!")
+        print("=" * 60)
+        print(f"📊 Scans archived: {len(plan):,}")
+        print(f"⏱️  Total time: {total_time:.2f} seconds")
+        print("=" * 60)
+    else:
+        print(f"\n❌ Archive operation completed with errors!")
+        print(f"⏱️  Total time: {total_time:.2f} seconds")
+        print("📋 Check the logs above for details.")
         sys.exit(1)
 
 
@@ -497,7 +814,7 @@ Examples:
         "--input", "-i", type=str, default=DEFAULT_PLAN_FILE,
         help=f"Input JSON plan file to execute (default: {DEFAULT_PLAN_FILE})"
     )
-    
+
     args = parser.parse_args()
 
     if not args.command:
