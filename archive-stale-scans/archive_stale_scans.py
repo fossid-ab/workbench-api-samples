@@ -5,7 +5,9 @@ command-based approach.
 
 Commands:
   plan    - Create a JSON plan of scans to be archived based on age criteria
+            Flow: connection check → list scans → find old scans → write plan
   archive - Execute archiving based on a previously created JSON plan
+            Flow: connection check → load plan → execute archive
 
 This two-step approach allows for validation and modification of the
 archive plan before execution.
@@ -27,21 +29,47 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+
+# Optimized datetime parsing function
+def parse_datetime_fast(date_str: str) -> datetime:
+    """Fast datetime parsing with error handling."""
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        # Fallback for different formats
+        try:
+            return datetime.fromisoformat(date_str.replace(' ', 'T'))
+        except ValueError:
+            # Last resort - try to parse with different separators
+            return datetime.strptime(date_str.replace('T', ' '), "%Y-%m-%d %H:%M:%S")
+
 # Configuration constants
-RECORDS_PER_PAGE = 100  # Number of records to fetch per page from the List_Scans API
-MAX_WORKERS = 10       # Maximum number of concurrent API requests for getting scan info
-BATCH_SIZE = 50        # Number of scans to process concurrently in each batch
+RECORDS_PER_PAGE = 500  # Number of records to fetch per page from List_Scans
+MAX_WORKERS = 15       # Maximum concurrent requests for getting scan info
+BATCH_SIZE = 75        # Number of scans to process concurrently in each batch
 DEFAULT_DAYS = 365     # Default age threshold for stale scans
 DEFAULT_PLAN_FILE = "archive_plan.json"  # Default plan file name
-API_TIMEOUT = 10       # API request timeout in seconds
-BATCH_DELAY = 0.1      # Delay between batches in seconds
 
-# Create a session object for making requests
+# Timeout configuration for different operations
+API_TIMEOUT_SHORT = 30      # Short operations (scan info)
+API_TIMEOUT_LONG = 300      # Long operations (list_scans)
+API_TIMEOUT_CONNECT = 10    # Connection timeout - 10 seconds
+MAX_RETRIES = 3            # Maximum number of retry attempts
+RETRY_DELAY = 2            # Base delay between retries in seconds
+
+# Create an optimized session object for making requests
 session = requests.Session()
-
-# Global cache for project information to avoid redundant API calls
-project_cache: Dict[str, Dict[str, Any]] = {}
-
+# Configure connection pooling for better performance
+session.mount('https://', requests.adapters.HTTPAdapter(
+    pool_connections=20,
+    pool_maxsize=20,
+    max_retries=0 
+))
+session.mount('http://', requests.adapters.HTTPAdapter(
+    pool_connections=20,
+    pool_maxsize=20,
+    max_retries=0
+))
 
 class SmartSampler:
     """Encapsulate the smart sampling algorithm for better testability and maintainability."""
@@ -153,27 +181,150 @@ def validate_and_get_credentials(args) -> Tuple[str, str, str]:
     return api_url, api_username, api_token
 
 
-def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Helper function to make API calls."""
+def make_api_call(url: str, payload: Dict[str, Any], timeout: int = API_TIMEOUT_SHORT) -> Dict[str, Any]:
+    """Helper function to make API calls with retry logic and configurable timeout."""
+    import time
+    
+    for attempt in range(MAX_RETRIES):
+        try:
+            if attempt > 0:
+                # Log retry attempt
+                logging.warning("Retrying API call (attempt %d/%d) after %d seconds...", 
+                              attempt + 1, MAX_RETRIES, RETRY_DELAY * attempt)
+                time.sleep(RETRY_DELAY * attempt)  # Exponential backoff
+            
+            logging.debug("Making API call with payload: %s (timeout: %ds)",
+                          json.dumps(payload, indent=2), timeout)
+            
+            # Use separate connect and read timeouts
+            response = session.post(
+                url, 
+                json=payload, 
+                timeout=(API_TIMEOUT_CONNECT, timeout)
+            )
+            response.raise_for_status()
+            
+            logging.debug("Received response: %s", response.text)
+            return response.json().get("data", {})
+            
+        except requests.exceptions.Timeout as e:
+            error_msg = f"API call timed out after {timeout}s (attempt {attempt + 1}/{MAX_RETRIES}): {str(e)}"
+            if attempt < MAX_RETRIES - 1:
+                logging.warning(error_msg)
+                continue
+            else:
+                logging.error(error_msg)
+                raise
+                
+        except requests.exceptions.ConnectionError as e:
+            error_msg = f"Connection error (attempt {attempt + 1}/{MAX_RETRIES}): {str(e)}"
+            if attempt < MAX_RETRIES - 1:
+                logging.warning(error_msg)
+                continue
+            else:
+                logging.error(error_msg)
+                raise
+                
+        except requests.exceptions.RequestException as e:
+            # For other request exceptions, don't retry
+            logging.error("API call failed: %s", str(e))
+            raise
+            
+        except json.JSONDecodeError as e:
+            logging.error("Failed to parse JSON response: %s", str(e))
+            raise
+
+    # This should never be reached, but just in case
+    raise requests.exceptions.RequestException("Max retries exceeded")
+
+
+def check_workbench_connection(url: str, username: str, token: str) -> Dict[str, Any]:
+    """
+    Check Workbench connection and get server info early to validate credentials.
+    
+    Returns:
+        Dict containing server info, or empty dict if connection fails
+    """
+    print("\n🔗 Workbench Connection Check:")
+    print(f"  API URL                    : {url}")
+    print(f"  API User                   : {username}")
+    print(f"  API Token                  : {'****' if token else 'None'}")
+    
     try:
-        logging.debug("Making API call with payload: %s",
-                      json.dumps(payload, indent=2))
-        response = session.post(url, json=payload, timeout=API_TIMEOUT)
-        response.raise_for_status()
-        logging.debug("Received response: %s", response.text)
-        return response.json().get("data", {})
-    except requests.exceptions.RequestException as e:
-        logging.error("API call failed: %s", str(e))
-        raise
-    except json.JSONDecodeError as e:
-        logging.error("Failed to parse JSON response: %s", str(e))
-        raise
+        # Try to get server configuration to validate connection
+        payload = {
+            "group": "internal", 
+            "action": "getConfig", 
+            "data": {
+                "username": username,
+                "key": token
+            }
+        }
+        
+        logging.info("Testing connection to Workbench...")
+        config_data = make_api_call(url, payload, timeout=API_TIMEOUT_SHORT)
+        
+        if config_data:
+            # Extract server information from config
+            server_name = config_data.get("server_name", "Unknown")
+            version = config_data.get("version", "Unknown")
+            
+            print(f"  Server Name                : {server_name}")
+            print(f"  Workbench Version          : {version}")
+            print("  Status                     : ✓ Connected")
+            print("------------------------------------")
+            
+            logging.info("Connection test successful!")
+            return config_data
+        else:
+            print("  Server Name                : Unknown")
+            print("  Workbench Version          : Unknown") 
+            print("  Status                     : ⚠ No server info returned")
+            print("------------------------------------")
+            
+            logging.warning("Connection test returned no data")
+            return {}
+            
+    except requests.exceptions.Timeout as e:
+        print("  Status                     : ❌ Connection timeout")
+        print("------------------------------------")
+        logging.error("Connection test timed out: %s", str(e))
+        logging.error("The Workbench server may be slow or overloaded.")
+        sys.exit(1)
+        
+    except requests.exceptions.ConnectionError as e:
+        print("  Status                     : ❌ Connection failed")
+        print("------------------------------------")
+        logging.error("Connection test failed: %s", str(e))
+        logging.error("Please check the Workbench URL and your network connection.")
+        sys.exit(1)
+        
+    except requests.exceptions.HTTPError as e:
+        print("  Status                     : ❌ HTTP error")
+        print("------------------------------------")
+        if e.response.status_code == 401:
+            logging.error("Authentication failed - invalid username or token")
+        elif e.response.status_code == 403:
+            logging.error("Access forbidden - check user permissions")
+        else:
+            logging.error("HTTP error during connection test: %s", str(e))
+        logging.error("Please check your credentials and permissions.")
+        sys.exit(1)
+        
+    except Exception as e:
+        print("  Status                     : ❌ Unexpected error")
+        print("------------------------------------")
+        logging.error("Unexpected error during connection test: %s", str(e))
+        logging.error("Please check your configuration and try again.")
+        sys.exit(1)
 
 
 def list_scans(url: str, username: str, token: str) -> Dict[str, Any]:
-    """List all scans using pagination."""
+    """List all scans using pagination with extended timeout."""
     all_scans = {}
     page = 1
+
+    logging.info("Fetching scans from Workbench (this may take several minutes for large datasets)...")
 
     while True:
         payload = {
@@ -186,7 +337,10 @@ def list_scans(url: str, username: str, token: str) -> Dict[str, Any]:
                 "page": page
             },
         }
-        scans_page = make_api_call(url, payload)
+        
+        # Use longer timeout for list_scans as it can be slow for large datasets
+        logging.info("Fetching page %d of scans...", page)
+        scans_page = make_api_call(url, payload, timeout=API_TIMEOUT_LONG)
 
         if not scans_page:
             # No more data returned
@@ -194,6 +348,7 @@ def list_scans(url: str, username: str, token: str) -> Dict[str, Any]:
 
         # Merge this page's scans into the total
         all_scans.update(scans_page)
+        logging.info("Retrieved %d scans so far...", len(all_scans))
 
         # Check if we got a full page - if not, this was the last page
         if len(scans_page) < RECORDS_PER_PAGE:
@@ -216,24 +371,7 @@ def get_scan_info(
     return make_api_call(url, payload)
 
 
-def get_project_info(
-    url: str, username: str, token: str, project_code: str
-) -> Dict[str, Any]:
-    """Get the project name for each scan's project code."""
-    # Check cache first
-    if project_code in project_cache:
-        return project_cache[project_code]
-    payload = {
-        "group": "projects",
-        "action": "get_information",
-        "data": {"username": username, "key": token,
-                 "project_code": project_code},
-    }
-    result = make_api_call(url, payload)
-
-    # Cache the result
-    project_cache[project_code] = result
-    return result
+# get_project_info function removed - now using project_code directly from scan info
 
 
 def get_scan_info_batch(
@@ -330,8 +468,7 @@ def find_old_scans(
             try:
                 scan_details = sample_details[scan_code]
                 if not scan_details.get("is_archived"):
-                    update_date = datetime.strptime(
-                        scan_details["updated"], "%Y-%m-%d %H:%M:%S")
+                    update_date = parse_datetime_fast(scan_details["updated"])
                     is_old = update_date < time_limit
                     sample_ages.append((sample_indices[i], is_old, update_date))
             except (KeyError, ValueError):
@@ -340,6 +477,15 @@ def find_old_scans(
     if not sample_ages:
         logging.warning("No valid samples found, processing all scans")
         return scans
+    
+    # Early exit optimization: check if any old scans were found in samples
+    old_scan_count = sum(1 for _, is_old, _ in sample_ages if is_old)
+    if old_scan_count == 0:
+        logging.info("No old scans detected in samples - skipping full processing")
+        return {}
+    
+    logging.info("Found %d old scans in samples (%.1f%% of samples) - proceeding with full processing", 
+                 old_scan_count, (old_scan_count / len(sample_ages)) * 100)
     
     # Identify promising ranges based on samples
     if progress_callback:
@@ -451,10 +597,8 @@ def process_scans(
                 continue
                 
             try:
-                creation_date = datetime.strptime(
-                    scan_details["created"], "%Y-%m-%d %H:%M:%S")
-                update_date = datetime.strptime(
-                    scan_details["updated"], "%Y-%m-%d %H:%M:%S")
+                creation_date = parse_datetime_fast(scan_details["created"])
+                update_date = parse_datetime_fast(scan_details["updated"])
                 
                 if update_date < time_limit:
                     project_code = scan_details.get("project_code")
@@ -470,9 +614,7 @@ def process_scans(
                                 scan_code, str(e))
                 continue
         
-        # Add delay between batches
-        if i + BATCH_SIZE < total_scans:
-            time.sleep(BATCH_DELAY)
+        # Batch delay removed for better performance
     
     logging.info("Processing complete: found %d old scans", len(old_scans))
     
@@ -483,7 +625,7 @@ def process_scans(
 
 
 def archive_scan(url: str, username: str, token: str, scan_code: str) -> bool:
-    """Archive a scan."""
+    """Archive a scan with retry logic."""
     payload = {
         "group": "scans",
         "action": "archive_scan",
@@ -491,39 +633,30 @@ def archive_scan(url: str, username: str, token: str, scan_code: str) -> bool:
                  "scan_code": scan_code},
     }
     try:
-        response = session.post(url, json=payload)
-        response.raise_for_status()
-        return response.status_code == 200
+        # Use the enhanced make_api_call with retry logic
+        make_api_call(url, payload, timeout=API_TIMEOUT_SHORT)
+        return True
     except requests.exceptions.RequestException as e:
-        logging.error("Error archiving scan %s: %s", scan_code,
-                      str(e))
+        logging.error("Error archiving scan %s: %s", scan_code, str(e))
         return False
 
 
 def create_scan_plan(
-    scans: List[Tuple[Optional[str], str, str, datetime, datetime]],
-    url: str, username: str, token: str
+    scans: List[Tuple[Optional[str], str, str, datetime, datetime]]
 ) -> List[Dict[str, Any]]:
-    """Create a plan with detailed scan information for archiving."""
+    """Create a plan with detailed scan information for archiving.
+    
+    Uses project_code directly from scan info to avoid unnecessary API calls.
+    """
     plan = []
 
     for project_code, scan_name, scan_code, creation_date, update_date \
             in scans:
-        project_name = "No Project"
-        if project_code:
-            try:
-                project_info = get_project_info(
-                    url, username, token, project_code)
-                project_name = project_info.get(
-                    "project_name", "Unknown Project")
-            except Exception as e:
-                logging.warning(
-                    "Failed to fetch project info for %s: %s",
-                               project_code, str(e))
-                project_name = f"Project {project_code}"
+        # Use project_code directly instead of fetching project_name
+        project_identifier = project_code if project_code else "No Project"
 
         scan_entry = {
-            "project_name": project_name,
+            "project_code": project_identifier,
             "scan_code": scan_code,
             "scan_name": scan_name,
             "creation_date": creation_date.isoformat(),
@@ -617,15 +750,26 @@ def progress_display(stage: str, current: int, total: int) -> None:
 def fetch_and_find_old_scans(
     url: str, username: str, token: str, days: int
 ) -> List[Tuple[Optional[str], str, str, datetime, datetime]]:
-    """Fetch scans and find ones older than the specified number of days."""
-    logging.info("Fetching scans from Workbench...")
+    """Fetch scans and find ones older than the specified number of days.
+    
+    Note: This function assumes connection has already been validated.
+    """
     try:
         scans = list_scans(url, username, token)
+    except requests.exceptions.Timeout as e:
+        logging.error("Request timed out while fetching scans: %s", str(e))
+        logging.error("This usually happens with very large datasets. The script will retry automatically.")
+        logging.error("If timeouts persist, the Workbench server may be overloaded or slow.")
+        sys.exit(1)
+    except requests.exceptions.ConnectionError as e:
+        logging.error("Connection error while fetching scans: %s", str(e))
+        logging.error("Please check your network connection and Workbench URL.")
+        sys.exit(1)
     except requests.exceptions.RequestException as e:
-        logging.error("Failed to retrieve scans from Workbench: %s",
-                      str(e))
+        logging.error("Failed to retrieve scans from Workbench: %s", str(e))
         logging.error("Please check the Workbench URL, Username and Token.")
         sys.exit(1)
+    
     logging.info("Found %d total scans", len(scans))
     logging.info("Finding scans last updated more than %d days ago...", days)
 
@@ -678,6 +822,10 @@ def cmd_plan(url: str, username: str, token: str, days: int, output_file: str):
     print(f"\n🔍 Creating archive plan for scans older than {days} days...")
     print("=" * 60)
     
+    # Step 1: Connection check to validate credentials and URL
+    check_workbench_connection(url, username, token)
+    
+    # Step 2: Fetch scans and find old ones
     old_scans = fetch_and_find_old_scans(url, username, token, days)
     if not old_scans:
         print(f"\n📋 No scans found older than {days} days.")
@@ -685,13 +833,12 @@ def cmd_plan(url: str, username: str, token: str, days: int, output_file: str):
         save_plan_to_file([], output_file)
         print(f"📄 Empty plan saved to: {output_file}")
         return
-    
+
+    # Step 3: Create detailed plan with scan information
     print(f"\n📊 Creating detailed plan for {len(old_scans):,} scans...")
+    plan = create_scan_plan(old_scans)
     
-    # Create detailed plan with project information
-    plan = create_scan_plan(old_scans, url, username, token)
-    
-    # Save plan to file
+    # Step 4: Save plan to file
     save_plan_to_file(plan, output_file)
     
     processing_time = time.time() - start_time
@@ -712,9 +859,13 @@ def cmd_archive(url: str, username: str, token: str, plan_file: str):
     """Archive scans based on a plan file."""
     start_time = time.time()
 
-    print(f"\n📂 Loading archive plan from {plan_file}...")
+    print(f"\n📂 Executing archive operation from {plan_file}...")
     print("=" * 60)
     
+    # Step 1: Connection check to validate credentials and URL
+    check_workbench_connection(url, username, token)
+    
+    # Step 2: Load the archive plan
     plan = load_plan_from_file(plan_file)
     
     if not plan:
@@ -723,18 +874,18 @@ def cmd_archive(url: str, username: str, token: str, plan_file: str):
 
     print(f"📊 Loaded plan with {len(plan):,} scans to archive")
     
-    # Show a summary of what will be archived
+    # Step 3: Show a summary of what will be archived
     if len(plan) <= 10:
         print(f"\n📋 Scans to be archived:")
         for i, scan in enumerate(plan[:10], 1):
-            print(f"   {i}. {scan['scan_name']} ({scan['project_name']}) - {scan['age_days']} days old")
+            print(f"   {i}. {scan['scan_name']} ({scan['project_code']}) - {scan['age_days']} days old")
     else:
         print(f"\n📋 Sample of scans to be archived:")
         for i, scan in enumerate(plan[:5], 1):
-            print(f"   {i}. {scan['scan_name']} ({scan['project_name']}) - {scan['age_days']} days old")
+            print(f"   {i}. {scan['scan_name']} ({scan['project_code']}) - {scan['age_days']} days old")
         print(f"   ... and {len(plan) - 5:,} more scans")
     
-    # Confirm operation
+    # Step 4: Confirm operation
     print(f"\n⚠️  WARNING: This will archive {len(plan):,} scans.")
     print("   This operation is IRREVERSIBLE!")
     confirmation = input(f"\n❓ Proceed with archiving? (y/n): ")
@@ -743,10 +894,10 @@ def cmd_archive(url: str, username: str, token: str, plan_file: str):
         print("❌ Operation cancelled.")
         return
 
+    # Step 5: Execute archive operation
     print(f"\n🚀 Starting archive operation...")
     print("=" * 60)
 
-    # Perform archiving
     success = archive_scans_from_plan(url, username, token, plan)
 
     total_time = time.time() - start_time
