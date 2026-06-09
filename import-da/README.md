@@ -1,50 +1,62 @@
-# import-da
+# Import Dependency Analysis
 
-This script imports Dependency Analysis (DA) results into an existing Workbench scan.
+Import ORT or FossID-DA `analyzer-result.json` into an existing Workbench scan.
 
-Use this script to add dependency analysis data to a scan that has already been created by uploading an analyzer-result.json file to a scan. 
+**Use [Workbench Agent CE](https://github.com/fossid-ab/workbench-agent-ce)** for this workflow. The `import-da/` sample script is kept as a minimal SDK reference; it takes a **scan code**, while the CE command resolves scans by **project name + scan name**.
 
+## Recommended: Workbench Agent CE
 
-# Setting Up
+See the [import-da command](https://github.com/fossid-ab/workbench-agent-ce/wiki) in the CE Wiki.
 
-Install the Workbench SDK from the repo root:
+### Credentials
+
+```sh
+export WORKBENCH_URL="https://workbench.example.com/api.php"
+export WORKBENCH_USER="your-username"
+export WORKBENCH_TOKEN="your-api-token"
+```
+
+### Examples
+
+```bash
+# Import DA results (credentials from env vars)
+workbench-agent import-da \
+  --project-name "MyProject" \
+  --scan-name "v1.0.0" \
+  --path ./ort-output/analyzer-result.json
+
+# Tune wait behaviour while polling import status
+workbench-agent import-da \
+  --project-name "MyProject" \
+  --scan-name "v1.0.0" \
+  --path ./analyzer-result.json \
+  --scan-wait-time 2 \
+  --scan-number-of-tries 60
+```
+
+```bash
+workbench-agent import-da --help
+```
+
+## Workbench SDK (sample script)
+
+SDK location in this repo:
+
+- **Submodule:** `vendor/workbench-agent-ce/` (pinned to `v0.9.0`)
+- **API docs:** [vendor/workbench-agent-ce/src/workbench_agent/api/README.md](../vendor/workbench-agent-ce/src/workbench_agent/api/README.md)
+
+The sample script targets an existing scan by code:
 
 ```sh
 pip install -r ../requirements-sdk.txt
+
+export WORKBENCH_URL="https://workbench.example.com/api.php"
+export WORKBENCH_USER="your-username"
+export WORKBENCH_TOKEN="your-api-token"
+
+python3 import-da.py --scan-code "MyProject/MyScan" --file ./analyzer-result.json
+python3 import-da.py --scan-code "MyProject/MyScan" --file ./analyzer-result.json \
+  --wait-time 2 --max-tries 60
 ```
 
-You need to provide a Workbench URL, User, and Token to use this script.
-These can be provided as Arguments or Environment Variables (recommended).
-
-### Environment Variables (Recommended)
-
-```sh
-export WORKBENCH_URL
-export WORKBENCH_USER
-export WORKBENCH_TOKEN
-```
-
-### Arguments
-
-```python
-python3 import-da.py --api-url <url> --api-user <user> --api-token <token>
-```
-
-# General Usage
-
-Invoke the script by providing the scan code and path to the analyzer-result.json file to upload.
-
-```python
-python3 import-da.py --scan-code <code> --file <path/to/analyzer-result.json>
-```
-
-Please note you need to provide a **scan code** of an existing scan, not a scan name.
-
-## Adjusting Wait Parameters
-
-By default, the script checks the import status every 2 seconds and will try up to 60 times.
-These behaviors can be overridden with the following arguments:
-
-```python
-python3 import-da.py --wait-time <seconds> --max-tries <number>
-```
+`--api-url`, `--api-user`, and `--api-token` override `WORKBENCH_URL`, `WORKBENCH_USER`, and `WORKBENCH_TOKEN` when set.

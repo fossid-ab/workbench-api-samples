@@ -1,50 +1,52 @@
 # get-project-policy
 
-This script retrieves license policy information for a Workbench project and saves it to a local file.
+Download a project's license policy from Workbench and save it locally (for example for the Diff Scanner).
 
-## Purpose
-
-The script connects to the Workbench API and fetches detailed policy information for a specified project. This is useful for retrieving the project license policy to use with the Diff Scanner.
-
-## Setting Up
-
-Install the Workbench SDK from the repo root:
+## Setup
 
 ```sh
 pip install -r ../requirements-sdk.txt
 ```
 
-You need to provide a Workbench URL, User, and Token to use this script.
-These can be provided as Arguments or Environment Variables (recommended).
+### Workbench SDK
 
-### Environment Variables (Recommended)
+- **Submodule:** `vendor/workbench-agent-ce/` (pinned to `v0.9.0`)
+- **API docs:** [vendor/workbench-agent-ce/src/workbench_agent/api/README.md](../vendor/workbench-agent-ce/src/workbench_agent/api/README.md)
+
+### Credentials
+
+Environment variables (recommended) or `--api-url` / `--api-user` / `--api-token`:
 
 ```sh
-export WORKBENCH_URL
-export WORKBENCH_USER
-export WORKBENCH_TOKEN
+export WORKBENCH_URL="https://workbench.example.com/api.php"
+export WORKBENCH_USER="your-username"
+export WORKBENCH_TOKEN="your-api-token"
 ```
 
-### Arguments
+## Usage
 
-```python
-python3 get_project_policy.py --api-url <url> --api-user <user> --api-token <token>
-```
+### With environment variables
 
-## General Usage
-
-Invoke the script by providing the project code to get policy information for:
-
-```python
+```bash
 python3 get_project_policy.py --project-code "company/project-name"
 ```
 
-The script will save the policy information to a file named `.fossidpolicy` in the current directory by default.
+Output defaults to `.fossidpolicy` in the current directory.
 
-### Custom Output File
+### Custom output path
 
-If not running from the repository root, you can use `--output-file` to send the policy file to a specific place.
+```bash
+python3 get_project_policy.py \
+  --project-code "company/project-name" \
+  --output-file "${GITHUB_WORKSPACE}/.fossidpolicy"
+```
 
-```python
-python3 get_project_policy.py --project-code "company/project-name" --output-file "${{ github.workspace }}/.fossidpolicy"
-``` 
+### Override credentials on the CLI
+
+```bash
+python3 get_project_policy.py \
+  --api-url "https://workbench.example.com/api.php" \
+  --api-user "admin" \
+  --api-token "your-token" \
+  --project-code "company/project-name"
+```

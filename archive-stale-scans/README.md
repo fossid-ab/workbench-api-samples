@@ -1,99 +1,75 @@
 # archive_stale_scans
 
-This script helps clients archive scans to reduce the storage space used by Workbench.
+Archive stale scans to reduce Workbench storage. Uses a two-step flow: **plan** (identify candidates) → **archive** (execute after review).
 
-The script uses a command-based approach with two steps: 
-- **plan** (identify scans to archive), and 
-- **archive** (execute the archiving). 
+Archiving removes scan files but keeps results for review. It does **not** delete scans.
 
-This allows for validation and review before performing any destructive operations.
-
-### Archive vs Delete?
-
-This script will not **delete** scans - instead it **archives** them. Archiving a scan removes the files associated with that scan, but keeps the results for future review. This will reduce overall storage usage by Workbench while keeping results for review.
-
-# Pre-Requisites
-
-Install the Workbench SDK from the repo root:
+## Setup
 
 ```sh
 pip install -r ../requirements-sdk.txt
 ```
 
-You need to provide a Workbench URL, User, and Token to use this script.
-These can be provided as Arguments or Environment Variables (recommended).
+### Workbench SDK
 
-### Environment Variables (Recommended)
+- **Submodule:** `vendor/workbench-agent-ce/` (pinned to `v0.9.0`)
+- **API docs:** [vendor/workbench-agent-ce/src/workbench_agent/api/README.md](../vendor/workbench-agent-ce/src/workbench_agent/api/README.md)
+
+### Credentials
+
+Environment variables (recommended) or `--workbench-url` / `--workbench-user` / `--workbench-token`:
 
 ```sh
-export WORKBENCH_URL
-export WORKBENCH_USER
-export WORKBENCH_TOKEN
+export WORKBENCH_URL="https://workbench.example.com/api.php"
+export WORKBENCH_USER="your-username"
+export WORKBENCH_TOKEN="your-api-token"
 ```
 
-### Arguments
+Only scans visible to the authenticated user can be archived.
+
+## Easy mode
+
+Default age threshold is 365 days:
 
 ```bash
-python3 archive_stale_scans.py plan --workbench-url <url> --workbench-user <user> --workbench-token <token>
-```
-
-Please Note: this script can only archive scans that the User (identified by the User and Token) has access to.
-
-# Easy Mode
-By default, the script archives scans older than 365 days. Here's the tl;dr:
-
-```bash
-# Create the Archive Plan
+# Create the archive plan (uses WORKBENCH_* env vars)
 python3 archive_stale_scans.py plan
 
-# Archive the Scans in the Plan
+# Review archive_plan.json, then archive
 python3 archive_stale_scans.py archive
 ```
 
-# Expert Mode
-Here's how you can customize the script's default behavior.
+## Expert mode
 
-## Step 1: Create an Archive Plan
-First, create a plan that identifies which scans will be archived. 
-The `--days` argument lets you specify the age you consider stale.
+### Step 1: Create a plan
 
 ```bash
 python3 archive_stale_scans.py plan --days 365
+python3 archive_stale_scans.py plan --days 180 -o my_plan.json
 ```
 
-You can customize where the output file is saved with `-o`:
+### Step 2: Review the plan
 
-```bash
-python3 archive_stale_scans.py plan -o archive_plan.json
-```
+The JSON lists project code, scan name/code, dates, and age in days.
 
-This writes a JSON file with information about each scan that would be archived to `archive_plan.json`.
-
-## Step 2: Review the Plan
-
-Before archiving, review the generated JSON file to verify which scans will be affected. The file contains:
-- Project names
-- Scan names and codes  
-- Creation and last modified dates
-- Age in days
-
-## Step 3: Execute the Plan
-When ready to proceed, execute the archive operation. 
-By default, the plan is read from the directory where the script is executed.
+### Step 3: Execute
 
 ```bash
 python3 archive_stale_scans.py archive
+python3 archive_stale_scans.py archive -i my_plan.json
 ```
 
-You can also target a archive plan in another location with `-i`:
+### Override credentials on the CLI
 
 ```bash
-python3 archive_stale_scans.py archive -i archive_plan.json
+python3 archive_stale_scans.py plan \
+  --workbench-url "https://workbench.example.com/api.php" \
+  --workbench-user "admin" \
+  --workbench-token "your-token" \
+  --days 365
 ```
 
-## Archive Plan JSON Schema
-
-The generated plan file contains structured data about each scan:
+## Archive plan JSON schema
 
 ```json
 {
@@ -101,11 +77,11 @@ The generated plan file contains structured data about each scan:
   "total_scans": 150,
   "scans": [
     {
-      "project_name": "Sample Project", 
+      "project_code": "company/project",
       "scan_code": "Scan_456",
       "scan_name": "Baseline Scan",
       "creation_date": "2024-01-15T09:00:00",
-      "last_modified": "2024-01-15T12:30:00", 
+      "last_modified": "2024-01-15T12:30:00",
       "age_days": 365
     }
   ]
