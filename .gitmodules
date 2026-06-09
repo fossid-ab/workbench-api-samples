@@ -1,0 +1,4 @@
+[submodule "vendor/workbench-agent-ce"]
+	path = vendor/workbench-agent-ce
+	url = https://github.com/fossid-ab/workbench-agent-ce.git
+	branch = main

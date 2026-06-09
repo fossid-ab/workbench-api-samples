@@ -11,151 +11,66 @@ it checks for policy violations.
 If there are policy violations, it exits with a message to the user with a link to review.
 """
 
-import json
-import time
 import logging
 import argparse
 import os
-import re
-from typing import Dict, Any
 import sys
-import requests
 
-# Constants
-API_ACTION_CHECK_STATUS = "check_status"
-API_ACTION_GET_PENDING_FILES = "get_pending_files"
-API_ACTION_GET_POLICY_WARNINGS = "get_policy_warnings_info"
+from workbench_agent.api.exceptions import WorkbenchApiError
+
+from lib.workbench_client import WorkbenchClient, normalize_api_url
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# Create a session object for making requests
-session = requests.Session()
+
+def set_env_variable(name: str, value: str):
+    """Sets an environment variable."""
+    os.environ[name] = value
+    logging.info("Setting the environment variable '%s'.", name)
 
 
-def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Helper function to make API calls."""
-    try:
-        logging.debug("Making API call with payload: %s", json.dumps(payload, indent=2))
-        response = session.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        logging.debug("Received response: %s", response.text)
-        return response.json().get("data", {})
-    except requests.exceptions.RequestException as e:
-        logging.error("API call failed: %s", str(e))
-        raise
-    except json.JSONDecodeError as e:
-        logging.error("Failed to parse JSON response: %s", str(e))
-        raise
-
-
-def check_scan_status(
-    api_url: str, username: str, token: str, scan_code: str
-) -> Dict[str, Any]:
-    """Check the status of the scan."""
-    payload = create_payload(username, token, scan_code, API_ACTION_CHECK_STATUS)
-    return make_api_call(api_url, payload)
-
-
-def check_pending_identifications(
-    api_url: str, username: str, token: str, scan_code: str
-) -> Dict[str, Any]:
-    """Check for pending identifications in the scan."""
-    payload = create_payload(username, token, scan_code, API_ACTION_GET_PENDING_FILES)
-    return make_api_call(api_url, payload)
-
-
-def check_policy_violations(
-    api_url: str, username: str, token: str, scan_code: str
-) -> Dict[str, Any]:
-    """Check for policy violations in the scan."""
-    payload = create_payload(username, token, scan_code, API_ACTION_GET_POLICY_WARNINGS)
-    return make_api_call(api_url, payload)
-
-
-def create_payload(
-    username: str, token: str, scan_code: str, action: str
-) -> Dict[str, Any]:
-    """Create payload for API calls."""
-    return {
-        "group": "scans",
-        "action": action,
-        "data": {"username": username, "key": token, "scan_code": scan_code},
-    }
-
-
-def validate_and_get_api_url(url: str) -> str:
-    """Validate and construct the API URL."""
-    if not url.endswith("/api.php"):
-        return url.rstrip("/") + "/api.php"
-    return url
-
-
-def generate_links(base_url: str, scan_id: int) -> Dict[str, str]:
-    """Generate links for scan results."""
-    return {
-        "scan_link": (
-            f"{base_url}/index.html?form=main_interface&action=scanview&sid={scan_id}"
-            f"&current_view=pending_items"
-        ),
-        "policy_link": (
-            f"{base_url}/index.html?form=main_interface&action=scanview&sid={scan_id}"
-            f"&current_view=mark_as_identified"
-        ),
-        "main_scan_link": (
-            f"{base_url}/index.html?form=main_interface&action=scanview&sid={scan_id}"
-        ),
-    }
-
-
-def wait_for_scan_completion(api_url: str, config: Dict[str, Any]) -> None:
+def wait_for_scan_completion(client: WorkbenchClient, scan_code: str, interval: int) -> None:
     """Wait for the scan to complete."""
     logging.info("Checking if the Scan is running...")
-    scan_status = check_scan_status(
-        api_url, config["username"], config["token"], config["scan_code"]
+    result = client.status_check.check_scan_status(
+        scan_code,
+        wait=True,
+        wait_retry_interval=interval,
     )
-    while scan_status.get("status") != "FINISHED":
-        logging.info(
-            "Scan Running: %s, waiting on completion...",
-            scan_status.get("status", "UNKNOWN"),
-        )
-        time.sleep(config["interval"])
-        scan_status = check_scan_status(
-            api_url, config["username"], config["token"], config["scan_code"]
-        )
-    logging.info("The Scan completed!")
+    logging.info("The Scan completed with status: %s", result.status)
 
 
 def check_pending_files(
-    api_url: str, config: Dict[str, Any], links: Dict[str, str]
+    client: WorkbenchClient, scan_code: str, show_files: bool, pending_link: str
 ) -> bool:
     """Check for pending files and exit if any are found."""
     logging.info("Checking if any files have Pending Identifications...")
-    pending_files = check_pending_identifications(
-        api_url, config["username"], config["token"], config["scan_code"]
-    )
+    pending_files = client.identification.get_pending_files(scan_code)
     if pending_files:
         file_names = list(pending_files.values())
         if file_names:
             logging.info("This scan has Files with Pending Identifications.")
-            if config["show_files"]:
+            if show_files:
                 logging.info("Files to Review: %s", ", ".join(file_names))
             logging.info(
-                "Review and Identify them in Workbench here: %s", links["scan_link"]
+                "Review and Identify them in Workbench here: %s", pending_link
             )
             return True
     logging.info("No files have Pending Identifications.")
     return False
 
 
-def check_policy(api_url: str, config: Dict[str, Any], links: Dict[str, str]) -> bool:
+def check_policy(
+    client: WorkbenchClient, scan_code: str, policy_check: bool, policy_link: str
+) -> bool:
     """Check for policy violations and return True if any are found."""
-    if config["policy_check"]:
+    if policy_check:
         logging.info("Checking for Policy Warnings...")
-        policy_violations = check_policy_violations(
-            api_url, config["username"], config["token"], config["scan_code"]
+        policy_violations = client.policy.get_scan_identification_policy_warnings_info(
+            scan_code
         )
         policy_warnings = policy_violations.get("policy_warnings_list", [])
         if policy_warnings:
@@ -174,25 +89,12 @@ def check_policy(api_url: str, config: Dict[str, Any], links: Dict[str, str]) ->
                         warning["findings"],
                     )
             logging.info(
-                "View Files with Warnings in Workbench here: %s", links["policy_link"]
+                "View Files with Warnings in Workbench here: %s", policy_link
             )
             return True
         logging.info("No policy violations found.")
     return False
 
-
-def get_scan_information(
-    api_url: str, username: str, token: str, scan_code: str
-) -> Dict[str, Any]:
-    """Get scan information from the API."""
-    payload = create_payload(username, token, scan_code, "get_information")
-    return make_api_call(api_url, payload)
-
-
-def set_env_variable(name: str, value: str):
-    """Sets an environment variable."""
-    os.environ[name] = value
-    logging.info(f"Setting the environment variable '{name}'.")
 
 def main():
     """Main function to orchestrate scan checks."""
@@ -230,55 +132,46 @@ def main():
 
     args = parser.parse_args()
 
-    config = {
-        "base_url": args.workbench_url or os.getenv("WORKBENCH_URL"),
-        "username": args.workbench_user or os.getenv("WORKBENCH_USER"),
-        "token": args.workbench_token or os.getenv("WORKBENCH_TOKEN"),
-        "scan_code": args.scan_code,
-        "interval": args.check_interval,
-        "show_files": args.show_files,
-        "policy_check": args.policy_check,
-    }
+    base_url = args.workbench_url or os.getenv("WORKBENCH_URL")
+    username = args.workbench_user or os.getenv("WORKBENCH_USER")
+    token = args.workbench_token or os.getenv("WORKBENCH_TOKEN")
 
-    if not config["base_url"] or not config["username"] or not config["token"]:
+    if not base_url or not username or not token:
         logging.error(
             "The Workbench URL, username, and token must be provided "
             "either as arguments or environment variables."
         )
         sys.exit(1)
 
-    api_url = validate_and_get_api_url(config["base_url"])
-    base_url_for_link = config["base_url"].replace("/api.php", "").rstrip("/")
-    exit_code = 0  # Initialize exit_code to 0 (success)
+    api_url = normalize_api_url(base_url)
+    exit_code = 0
+
     try:
-        # Get scan information
-        scan_info = get_scan_information(
-            api_url, config["username"], config["token"], config["scan_code"]
+        client = WorkbenchClient(api_url, username, token)
+        links = client.links.get_workbench_links(args.scan_code)
+
+        print(f"\nFOSSID_SCAN_URL={links.scan['url']}\n")
+        print(
+            "Note: You need to be signed in to FossID Workbench to access the link above, "
+            "otherwise you will see a spinning loading indicator."
         )
-        scan_id = scan_info.get("id")
+        set_env_variable("FOSSID_SCAN_URL", links.scan["url"])
 
-        if not scan_id:
-            logging.error("Failed to retrieve scan ID from the API.")
-            sys.exit(1)
+        wait_for_scan_completion(client, args.scan_code, args.check_interval)
+        if check_pending_files(
+            client, args.scan_code, args.show_files, links.pending["url"]
+        ):
+            exit_code = 1
+        if check_policy(
+            client, args.scan_code, args.policy_check, links.policy["url"]
+        ):
+            exit_code = 1
 
-        links = generate_links(base_url_for_link, scan_id)
-
-        # print the scan URL and set it as an environment variable for future job steps
-        print(f"\nFOSSID_SCAN_URL={links['main_scan_link']}\n")
-        print("Note: You need to be signed in to FossID Workbench to access the link above, otherwise you will see a spinning loading indicator.")
-        set_env_variable("FOSSID_SCAN_URL", links["main_scan_link"])
-
-        wait_for_scan_completion(api_url, config)
-        if check_pending_files(api_url, config, links):
-            exit_code = 1  # Set exit_code to 1 if pending files are found
-        if check_policy(api_url, config, links):
-            exit_code = 1  # Set exit_code to 1 if policy violations are found
-
-    except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
-        logging.error("An error occurred: %s", str(e))
+    except WorkbenchApiError as e:
+        logging.error("Workbench API error: %s", e)
         sys.exit(1)
 
-    sys.exit(exit_code)  # Exit with the appropriate code
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

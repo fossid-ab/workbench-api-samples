@@ -1,76 +1,80 @@
-# post_scan_gates
+# Post Scan Gates
 
-This script helps clients gate their CI/CD pipelines based on information from Workbench.
-This script can be used to halt a build pipeline if the scan has:
-- Any Files with Pending Identifications (Gate 1)
-- Any Files with Policy Violations (Gate 2)
+Gate CI/CD pipelines on Workbench scan quality: pending identifications, policy warnings, and (optionally) vulnerabilities.
 
-Files need to be Identified in order to be evaluated against Policy Rules.
-Thereforce, the Policy Check won't run if any files are Pending Identification. 
+**Use [Workbench Agent CE](https://github.com/fossid-ab/workbench-agent-ce)** for this workflow. The `post-scan-gates/` sample script is kept as a minimal SDK reference; it takes a **scan code**, while the CE command resolves scans by **project name + scan name**.
 
-You can use this script together with the [Workbench Agent](https://github.com/fossid-ab/workbench-agent/). 
-Use an Environment Variables, such as a built-in from your build environment, to set the scan code.
-Then use this script once the Workbench Agent completes its run!
+## Recommended: Workbench Agent CE
 
-# Setting Up
+Run after a scan completes (for example following `workbench-agent scan`). See the [Workbench Agent CE Wiki](https://github.com/fossid-ab/workbench-agent-ce/wiki).
 
-You need to provide a Workbench URL, User, and Token to use this script.
-These can be provided as Arguments or Environment Variables (recommended).
-
-### Environment Variables (Recommended)
+### Credentials
 
 ```sh
-export WORKBENCH_URL
-export WORKBENCH_USER
-export WORKBENCH_TOKEN
+export WORKBENCH_URL="https://workbench.example.com/api.php"
+export WORKBENCH_USER="your-username"
+export WORKBENCH_TOKEN="your-api-token"
 ```
 
-### Arguments
+### Examples
 
-```python
-python3 post_scan_gates.py --workbench-url <url> --workbench-user <user> --workbench-token <token>
+```bash
+# Report pending IDs and policy warnings (informational; exit 0 unless --fail-on-* is set)
+workbench-agent evaluate-gates \
+  --project-name "MyProject" \
+  --scan-name "v1.0.0"
+
+# Fail the step on policy violations
+workbench-agent evaluate-gates \
+  --project-name "MyProject" \
+  --scan-name "v1.0.0" \
+  --fail-on-policy
+
+# Fail on pending identifications
+workbench-agent evaluate-gates \
+  --project-name "MyProject" \
+  --scan-name "v1.0.0" \
+  --fail-on-pending
+
+# Fail on high-or-above CVEs
+workbench-agent evaluate-gates \
+  --project-name "MyProject" \
+  --scan-name "v1.0.0" \
+  --fail-on-vuln-severity high
+
+# Adjust status polling (default: 30s interval, 960 tries)
+workbench-agent evaluate-gates \
+  --project-name "MyProject" \
+  --scan-name "v1.0.0" \
+  --scan-wait-time 15
 ```
 
-# General Usage
-
-Invoke the script by providing the scan code via `--scan-code`.
-Please note you need to provide a **scan code**, not a scan name.
-
-```python
-python3 post_scan_gates.py --scan-code <code>
+```bash
+workbench-agent evaluate-gates --help
 ```
 
-When executed, the script will check the provided scan code for files with Pending Identifications.
-If any files contain Pending Identifications, a link is provided to the scan interface for users to review.
+In CI, pass project/scan names via your pipeline variables. Credentials can stay in `WORKBENCH_*` env vars.
 
-## Showing the Files Pending ID
+## Workbench SDK (sample script)
 
-By default, the script provides a link to Pending ID tab in the Scan Interface. 
-You can also display a list of files Pending ID with the `--show-files` argument.
+SDK location in this repo:
 
-```python
-python3 post_scan_gates.py --show-files
+- **Submodule:** `vendor/workbench-agent-ce/` (pinned to `v0.9.0`)
+- **API docs:** [vendor/workbench-agent-ce/src/workbench_agent/api/README.md](../vendor/workbench-agent-ce/src/workbench_agent/api/README.md)
+
+The sample script uses `--scan-code` and prints `FOSSID_SCAN_URL` for downstream job steps:
+
+```sh
+pip install -r ../requirements-sdk.txt
+
+export WORKBENCH_URL="https://workbench.example.com/api.php"
+export WORKBENCH_USER="your-username"
+export WORKBENCH_TOKEN="your-api-token"
+
+python3 post_scan_gates.py --scan-code "MyProject/MyScan"
+python3 post_scan_gates.py --scan-code "MyProject/MyScan" --show-files
+python3 post_scan_gates.py --scan-code "MyProject/MyScan" --policy-check
+python3 post_scan_gates.py --scan-code "MyProject/MyScan" --check-interval 15
 ```
 
-## Check for Policy Violations
-
-By default, the script only checks for files with Pending Identifications.
-Once all files have been Identified, you can check for policy violations with the `--policy-check` argument. 
-
-```python
-python3 post_scan_gates.py --policy-check
-```
-
-Please note the policy check will not run if any files contain Pending Identifications. 
-
-## Adjusting the Status Check Interval
-
-There is one time the script has to wait on Workbench in order to complete its run.
-That is, when the scan is still running. Large scans may take a long time to complete.
-By default, the script pings Workbench every 30 seconds to check the status of the operation.
-
-This behavior can be overridden by specifying a `--check-interval` in seconds.
-
-```python
-python3 check_pending_id.py --check-interval [time in seconds]
-```
+`--workbench-url`, `--workbench-user`, and `--workbench-token` override the environment variables when set.

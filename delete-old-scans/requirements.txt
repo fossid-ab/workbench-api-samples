@@ -1,6 +1,6 @@
-requests
+-r ../requirements-sdk.txt
 python-dotenv
 pycodestyle
 pylint
 black
-tabulate 
+tabulate

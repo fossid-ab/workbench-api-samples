@@ -11,49 +11,15 @@ import logging
 import argparse
 import os
 from typing import Dict, Any
-import requests
+
+from workbench_agent.api.exceptions import WorkbenchApiError
+
+from lib.workbench_client import WorkbenchClient, normalize_api_url
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
-
-# Create a session object for making requests
-session = requests.Session()
-
-
-def make_api_call(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Helper function to make API calls."""
-    try:
-        logging.debug("Making API call with payload: %s", json.dumps(payload, indent=2))
-        response = session.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        logging.debug("Received response: %s", response.text)
-        return response.json().get("data", {})
-    except requests.exceptions.RequestException as e:
-        logging.error("API call failed: %s", str(e))
-        raise
-    except json.JSONDecodeError as e:
-        logging.error("Failed to parse JSON response: %s", str(e))
-        raise
-
-
-def quick_scan(
-    api_url: str, api_user: str, api_key: str, file_content: str
-) -> Dict[str, Any]:
-    """Perform the quick scan"""
-    payload = {
-        "group": "quick_scan",
-        "action": "scan_one_file",
-        "data": {
-            "username": api_user,
-            "key": api_key,
-            "file_content": file_content,
-            "limit": "1",
-            "sensitivity": "10",
-        },
-    }
-    return make_api_call(api_url, payload)
 
 
 def format_scan_result(result_data: Dict[str, Any], quick_view_link: str) -> str:
@@ -84,37 +50,32 @@ def main(
     api_url: str, api_user: str, api_key: str, file_path: str, raw_output: bool
 ):
     """Main function to perform the quick scan and print the results."""
-    # Ensure the API URL ends with /api.php and doesn't contain it twice
-    if not api_url.endswith("/api.php"):
-        api_url = api_url.rstrip("/") + "/api.php"
+    api_url = normalize_api_url(api_url)
+    client = WorkbenchClient(api_url, api_user, api_key)
 
-    # Read and encode the file content in base64
     with open(file_path, "rb") as file:
         file_content = base64.b64encode(file.read()).decode("utf-8")
 
     try:
-        # Perform the quick scan
         logging.info("Performing quick scan...")
-        scan_result = quick_scan(api_url, api_user, api_key, file_content)
+        scan_result = client.quick_scan_service.scan_one_file(
+            file_content, limit=1, sensitivity=10
+        )
         if scan_result:
             quick_view_link = (
                 api_url.replace("/api.php", "")
                 + "/?form=main_interface&action=quickview"
             )
             for result in scan_result:
-                result_data = json.loads(result)
                 if raw_output:
-                    print(json.dumps(result_data, indent=2))
+                    print(json.dumps(result, indent=2))
                 else:
-                    message = format_scan_result(result_data, quick_view_link)
+                    message = format_scan_result(result, quick_view_link)
                     logging.info(message)
         else:
             logging.info("No matches found.")
-    except requests.exceptions.RequestException as e:
-        logging.error("API call failed: %s", str(e))
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        logging.error("Failed to parse JSON response: %s", str(e))
+    except WorkbenchApiError as e:
+        logging.error("Workbench API error: %s", e)
         sys.exit(1)
 
 

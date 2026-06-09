@@ -1,69 +1,70 @@
-# post_scan_reports
+# Post Scan Reports
 
-This script helps clients download reports after a scan completes.
-By default, the script generates and downloads every report type once a scan completes.
+Download Workbench reports after a scan finishes — useful as CI build artifacts.
 
-You can use this script together with the [Workbench Agent](https://github.com/fossid-ab/workbench-agent/). 
-Use an Environment Variables, such as a built-in from your build environment, to set the scan code.
-Then use this script once the Workbench Agent completes its run!
+**Use [Workbench Agent CE](https://github.com/fossid-ab/workbench-agent-ce)** for this workflow. The `post-scan-reports/` sample script is kept as a minimal SDK reference.
 
-# Setting Up
+## Recommended: Workbench Agent CE
 
-You need to provide a Workbench URL, User, and Token to use this script.
-These can be provided as Arguments or Environment Variables (recommended).
+Run after a scan completes. See [download-reports](https://github.com/fossid-ab/workbench-agent-ce/wiki) in the CE Wiki.
 
-### Environment Variables (Recommended)
+### Credentials
 
 ```sh
-export WORKBENCH_URL
-export WORKBENCH_USER
-export WORKBENCH_TOKEN
+export WORKBENCH_URL="https://workbench.example.com/api.php"
+export WORKBENCH_USER="your-username"
+export WORKBENCH_TOKEN="your-api-token"
 ```
 
-### Arguments
+### Examples
 
-```python
-python3 post_scan_reports.py --workbench-url <url> --workbench-user <user> --workbench-token <token>
+```bash
+# Download all scan-level reports (credentials from env vars)
+workbench-agent download-reports \
+  --project-name "MyProject" \
+  --scan-name "v1.0.0" \
+  --report-scope scan
+
+# Specific report types and output directory
+workbench-agent download-reports \
+  --project-name "MyProject" \
+  --scan-name "v1.0.0" \
+  --report-scope scan \
+  --report-type xlsx,spdx \
+  --report-save-path ./reports/
+
+# Adjust status polling while waiting for scan/reports
+workbench-agent download-reports \
+  --project-name "MyProject" \
+  --scan-name "v1.0.0" \
+  --report-scope scan \
+  --scan-wait-time 15
 ```
 
-# General Usage
-
-Invoke the script by providing the scan code via `--scan-code`.
-
-```python
-python3 post_scan_reports.py --scan-code <code>
+```bash
+workbench-agent download-reports --help
 ```
 
-Please note you need to provide a **scan code**, not a scan name.
+## Workbench SDK (sample script)
 
-## Changing the Report Type
+SDK location in this repo:
 
-By default, the script downloads all available reports for the scan. 
-Change this behavior by passing the `--report-type` argument.
+- **Submodule:** `vendor/workbench-agent-ce/` (pinned to `v0.9.0`)
+- **API docs:** [vendor/workbench-agent-ce/src/workbench_agent/api/README.md](../vendor/workbench-agent-ce/src/workbench_agent/api/README.md)
 
-```python
-python3 post_scan_reports.py --report-type ["html", "dynamic_top_matched_components", "xlsx", "spdx", "spdx_lite", "cyclone_dx", "string_match"]
+The sample script uses `--scan-code` instead of project/scan names:
+
+```sh
+pip install -r ../requirements-sdk.txt
+
+export WORKBENCH_URL="https://workbench.example.com/api.php"
+export WORKBENCH_USER="your-username"
+export WORKBENCH_TOKEN="your-api-token"
+
+python3 post_scan_reports.py --scan-code "MyProject/MyScan"
+python3 post_scan_reports.py --scan-code "MyProject/MyScan" --report-type xlsx
+python3 post_scan_reports.py --scan-code "MyProject/MyScan" --output-dir ./reports/
+python3 post_scan_reports.py --scan-code "MyProject/MyScan" --check-interval 15
 ```
 
-Currently only one report type is supported at a time.
-
-## Adjusting the Status Check Interval
-
-There are two times the script has to wait on Workbench in order to complete its run.
-First, when the scan is running. Next, once report generation kicks off.
-Large scans may take a long time to complete, and large reports a long time to generate. 
-By default, the script pings Workbench every 30 seconds to check the status of these operations.
-
-This behavior can be overridden by specifying a `--check-interval` in seconds.
-
-```python
-python3 post_scan_reports.py --check-interval [time in seconds]
-```
-
-## Changing the Report Output Directory
-By default, reports will be output to the directory from which the script is executed. 
-You can override this behavior by passing `--output-dir`.
-
-```python
-python3 post_scan_reports.py --output-dir ./reports/
-```
+`--workbench-url`, `--workbench-user`, and `--workbench-token` override the environment variables when set.
