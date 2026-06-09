@@ -7,6 +7,12 @@ Use this script to add dependency analysis data to a scan that has already been 
 
 # Setting Up
 
+Install the Workbench SDK from the repo root:
+
+```sh
+pip install -r ../requirements-sdk.txt
+```
+
 You need to provide a Workbench URL, User, and Token to use this script.
 These can be provided as Arguments or Environment Variables (recommended).
 

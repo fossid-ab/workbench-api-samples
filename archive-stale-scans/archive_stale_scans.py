@@ -19,7 +19,16 @@ import os
 from typing import List, Tuple, Dict, Any, Optional, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
-import requests
+
+from workbench_agent.api.exceptions import WorkbenchApiError
+
+from lib.workbench_client import (
+    WorkbenchClient,
+    archive_scan as sdk_archive_scan,
+    list_scans_paginated,
+    normalize_api_url,
+    print_connection_info,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -46,28 +55,6 @@ MAX_WORKERS = 15
 BATCH_SIZE = 75
 DEFAULT_DAYS = 365
 DEFAULT_PLAN_FILE = "archive_plan.json"
-
-# Timeout configuration
-API_TIMEOUT_SHORT = 30
-API_TIMEOUT_LONG = 300
-API_TIMEOUT_CONNECT = 10
-MAX_RETRIES = 3
-RETRY_DELAY = 2
-
-# Create an optimized session object for making requests
-session = requests.Session()
-# Configure connection pooling for better performance
-session.mount('https://', requests.adapters.HTTPAdapter(
-    pool_connections=20,
-    pool_maxsize=20,
-    max_retries=0 
-))
-session.mount('http://', requests.adapters.HTTPAdapter(
-    pool_connections=20,
-    pool_maxsize=20,
-    max_retries=0
-))
-
 
 class PercentageProgressTracker:
     """Track progress and log only at percentage milestones for large datasets."""
@@ -198,205 +185,65 @@ def validate_and_get_credentials(args) -> Tuple[str, str, str]:
         )
         sys.exit(1)
 
-    # Sanity check for Workbench URL
-    if not api_url.endswith("/api.php"):
-        api_url += "/api.php"
-
-    return api_url, api_username, api_token
+    return normalize_api_url(api_url), api_username, api_token
 
 
-def make_api_call(url: str, payload: Dict[str, Any], timeout: int = API_TIMEOUT_SHORT) -> Dict[str, Any]:
-    """Make API calls with retry logic and configurable timeout."""
-    for attempt in range(MAX_RETRIES):
-        try:
-            if attempt > 0:
-                time.sleep(RETRY_DELAY * attempt)  # Exponential backoff
-            response = session.post(url, json=payload, timeout=(API_TIMEOUT_CONNECT, timeout))
-            response.raise_for_status()
-            return response.json().get("data", {})
-        except requests.exceptions.RequestException as e:
-            if attempt == MAX_RETRIES - 1:
-                logging.error("API call failed after %d attempts: %s", MAX_RETRIES, str(e))
-                raise
-    raise requests.exceptions.RequestException("Max retries exceeded")
-
-
-def check_workbench_connection(url: str, username: str, token: str) -> Dict[str, Any]:
-    """
-    Check Workbench connection and get server info early to validate credentials.
-    
-    Returns:
-        Dict containing server info, or empty dict if connection fails
-    """
+def check_workbench_connection(client: WorkbenchClient) -> Dict[str, Any]:
+    """Check Workbench connection and get server info early to validate credentials."""
     try:
-        # Try to get server configuration to validate connection
-        payload = {
-            "group": "internal", 
-            "action": "getConfig", 
-            "data": {
-                "username": username,
-                "key": token
-            }
-        }
-        
-        config_data = make_api_call(url, payload, timeout=API_TIMEOUT_SHORT)
-        
-        if config_data:
-            # Extract server information from config
-            server_name = config_data.get("server_name", "Unknown")
-            version = config_data.get("version", "Unknown")
-
-            print(f"  Server Name                : {server_name}")
-            print(f"  Workbench Version          : {version}")
-            print("  Status                     : ✓ Connected")
-            print("------------------------------------")
-
-            logging.info("Connection test successful!")
-            return config_data
-        else:
-            print("  Server Name                : Unknown")
-            print("  Workbench Version          : Unknown")
-            print("  Status                     : ⚠ No server info returned")
-            print("------------------------------------")
-
-            logging.warning("Connection test returned no data")
-            return {}
-            
-    except requests.exceptions.Timeout as e:
-        print("  Status                     : ❌ Connection timeout")
-        print("------------------------------------")
-        logging.error("Connection test timed out: %s", str(e))
-        logging.error("The Workbench server may be slow or overloaded.")
-        sys.exit(1)
-        
-    except requests.exceptions.ConnectionError as e:
+        logging.info("Connection test successful!")
+        return print_connection_info(client)
+    except WorkbenchApiError as e:
         print("  Status                     : ❌ Connection failed")
         print("------------------------------------")
-        logging.error("Connection test failed: %s", str(e))
-        logging.error("Please check the Workbench URL and your network connection.")
-        sys.exit(1)
-        
-    except requests.exceptions.HTTPError as e:
-        print("  Status                     : ❌ HTTP error")
-        print("------------------------------------")
-        if e.response.status_code == 401:
-            logging.error("Authentication failed - invalid username or token")
-        elif e.response.status_code == 403:
-            logging.error("Access forbidden - check user permissions")
-        else:
-            logging.error("HTTP error during connection test: %s", str(e))
-        logging.error("Please check your credentials and permissions.")
-        sys.exit(1)
-        
-    except Exception as e:
-        print("  Status                     : ❌ Unexpected error")
-        print("------------------------------------")
-        logging.error("Unexpected error during connection test: %s", str(e))
-        logging.error("Please check your configuration and try again.")
+        logging.error("Connection test failed: %s", e)
+        logging.error("Please check the Workbench URL, credentials, and network connection.")
         sys.exit(1)
 
 
-def list_scans(url: str, username: str, token: str) -> Dict[str, Any]:
+def list_scans(client: WorkbenchClient) -> Dict[str, Any]:
     """List all scans with adaptive progress reporting."""
-    all_scans = {}
-    page = 1
-    last_logged_count = 0
-
     logging.info("Fetching scans from Workbench (this may take several minutes for large datasets)...")
-
-    while True:
-        payload = {
-            "group": "scans",
-            "action": "list_scans",
-            "data": {
-                "username": username,
-                "key": token,
-                "records_per_page": RECORDS_PER_PAGE,
-                "page": page
-            },
-        }
-
-        # Use longer timeout for list_scans as it can be slow for large datasets
-        logging.debug("Fetching page %d of scans...", page)
-        scans_page = make_api_call(url, payload, timeout=API_TIMEOUT_LONG)
-
-        if not scans_page:
-            # No more data returned
-            break
-
-        # Merge this page's scans into the total
-        all_scans.update(scans_page)
-        current_count = len(all_scans)
-
-        # Adaptive logging based on dataset size
-        if current_count >= 100000:  # Very large dataset (100k+)
-            log_interval = current_count // 10  # Log every 10%
-        elif current_count >= 10000:  # Large dataset (10k+)
-            log_interval = current_count // 5   # Log every 20%
-        else:  # Smaller dataset
-            log_interval = 2500  # Log every 2500 scans
-
-        if current_count - last_logged_count >= log_interval or len(scans_page) < RECORDS_PER_PAGE:
-            logging.info("Retrieved %d scans so far...", current_count)
-            last_logged_count = current_count
-
-        # Check if we got a full page - if not, this was the last page
-        if len(scans_page) < RECORDS_PER_PAGE:
-            break
-
-        page += 1
-
+    all_scans = list_scans_paginated(client, records_per_page=RECORDS_PER_PAGE)
     logging.info("Scan retrieval complete: %d total scans found", len(all_scans))
     return all_scans
 
 
-def get_scan_info(
-    url: str, username: str, token: str, scan_code: str
-) -> Dict[str, Any]:
+def get_scan_info(client: WorkbenchClient, scan_code: str) -> Dict[str, Any]:
     """Get scan info for each scan."""
-    payload = {
-        "group": "scans",
-        "action": "get_information",
-        "data": {"username": username, "key": token, "scan_code": scan_code},
-    }
-    return make_api_call(url, payload)
-
-
-# get_project_info function removed - now using project_code directly from scan info
+    return client.scans.get_information(scan_code)
 
 
 def get_scan_info_batch(
-    url: str, username: str, token: str, scan_codes: List[str]
+    client: WorkbenchClient, scan_codes: List[str]
 ) -> Dict[str, Dict[str, Any]]:
     """Get scan information for multiple scans concurrently."""
     results = {}
 
     def fetch_single_scan(scan_code: str) -> Tuple[str, Dict[str, Any]]:
         try:
-            scan_info = get_scan_info(url, username, token, scan_code)
+            scan_info = get_scan_info(client, scan_code)
             return scan_code, scan_info
-        except Exception as e:
-            logging.error("Failed to fetch scan info for %s: %s",
-                          scan_code, str(e))
+        except WorkbenchApiError as e:
+            logging.error("Failed to fetch scan info for %s: %s", scan_code, e)
             return scan_code, {}
+
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        # Submit all tasks
         future_to_scan = {
             executor.submit(fetch_single_scan, scan_code): scan_code
             for scan_code in scan_codes
         }
 
-        # Collect results as they complete
         for future in as_completed(future_to_scan):
             scan_code, scan_info = future.result()
-            if scan_info:  # Only store successful results
+            if scan_info:
                 results[scan_code] = scan_info
 
     return results
 
 
 def find_old_scans(
-    scans: Dict[str, Any], url: str, username: str, token: str, days: int,
+    scans: Dict[str, Any], client: WorkbenchClient, days: int,
     progress_callback: Optional[Callable[[str, int, int], None]] = None
 ) -> Dict[str, Any]:
     """Intelligently sample scans to identify promising subsets for processing.
@@ -447,7 +294,7 @@ def find_old_scans(
     if progress_callback:
         progress_callback("fetching_samples", 0, len(sample_codes))
     
-    sample_details = get_scan_info_batch(url, username, token, sample_codes)
+    sample_details = get_scan_info_batch(client, sample_codes)
     
     if progress_callback:
         progress_callback("fetching_samples", len(sample_codes), len(sample_codes))
@@ -520,7 +367,7 @@ def find_old_scans(
 
 
 def process_scans(
-    scans: Dict[str, Any], url: str, username: str, token: str, days: int,
+    scans: Dict[str, Any], client: WorkbenchClient, days: int,
     progress_callback: Optional[Callable[[str, int, int], None]] = None
 ) -> List[Tuple[Optional[str], str, str, datetime, datetime]]:
     """Process scans to find those older than the specified days.
@@ -574,7 +421,7 @@ def process_scans(
         progress_tracker.update(processed, "Scan processing")
         
         # Fetch scan details concurrently for this batch
-        scan_details_batch = get_scan_info_batch(url, username, token, scan_codes)
+        scan_details_batch = get_scan_info_batch(client, scan_codes)
         
         # Process the results
         for _, scan_info in batch:
@@ -617,21 +464,12 @@ def process_scans(
     return old_scans
 
 
-def archive_scan(url: str, username: str, token: str, scan_code: str) -> bool:
-    """Archive a scan with retry logic."""
-    payload = {
-        "group": "scans",
-        "action": "archive_scan",
-        "data": {"username": username, "key": token,
-                 "scan_code": scan_code},
-    }
-    try:
-        # Use the enhanced make_api_call with retry logic
-        make_api_call(url, payload, timeout=API_TIMEOUT_SHORT)
+def archive_scan(client: WorkbenchClient, scan_code: str) -> bool:
+    """Archive a scan using the SDK gap helper."""
+    if sdk_archive_scan(client, scan_code):
         return True
-    except requests.exceptions.RequestException as e:
-        logging.error("Error archiving scan %s: %s", scan_code, str(e))
-        return False
+    logging.error("Error archiving scan %s", scan_code)
+    return False
 
 
 def create_scan_plan(
@@ -725,31 +563,19 @@ def progress_display(stage: str, current: int, total: int) -> None:
         print(f"\n🎉 Found {current:,} old scans ready for archiving!")
 
 
-def fetch_all_scans(url: str, username: str, token: str) -> Dict[str, Any]:
-    """Fetch all scans from Workbench.
-
-    This function handles the pagination and retrieval of all scans.
-    Returns a dictionary of all scans keyed by scan code.
-
-    Args:
-        url: Workbench API URL
-        username: Workbench username
-        token: Workbench API token
-
-    Returns:
-        Dictionary of all scans from Workbench
-    """
+def fetch_all_scans(client: WorkbenchClient) -> Dict[str, Any]:
+    """Fetch all scans from Workbench."""
     try:
-        scans = list_scans(url, username, token)
+        scans = list_scans(client)
         logging.info("Found %d total scans", len(scans))
         return scans
-    except requests.exceptions.RequestException as e:
-        logging.error("Failed to retrieve scans from Workbench: %s", str(e))
+    except WorkbenchApiError as e:
+        logging.error("Failed to retrieve scans from Workbench: %s", e)
         sys.exit(1)
 
 
 def find_and_process_old_scans(
-    scans: Dict[str, Any], url: str, username: str, token: str, days: int
+    scans: Dict[str, Any], client: WorkbenchClient, days: int
 ) -> List[Tuple[Optional[str], str, str, datetime, datetime]]:
     """Find and process old scans using smart sampling and filtering.
 
@@ -770,15 +596,14 @@ def find_and_process_old_scans(
 
     # Step 1: Use smart sampling to filter the scan set
     filtered_scans = find_old_scans(
-        scans, url, username, token, days, progress_display)
+        scans, client, days, progress_display)
 
-    # Step 2: Process the filtered scans to find old ones
     return process_scans(
-        filtered_scans, url, username, token, days, progress_display)
+        filtered_scans, client, days, progress_display)
 
 
 def archive_scans_from_plan(
-    url: str, username: str, token: str, plan: List[Dict[str, Any]]
+    client: WorkbenchClient, plan: List[Dict[str, Any]]
 ):
     """Archive scans based on a plan loaded from JSON."""
     total_scans = len(plan)
@@ -793,7 +618,7 @@ def archive_scans_from_plan(
         
         logging.info("(%d/%d) Archiving...", i, total_scans)
         
-        if archive_scan(url, username, token, scan_code):
+        if archive_scan(client, scan_code):
             successful += 1
         else:
             logging.error("Failed to archive scan: %s", scan_name)
@@ -813,18 +638,17 @@ def archive_scans_from_plan(
 def cmd_plan(url: str, username: str, token: str, days: int, output_file: str):
     """Create a plan of scans to be archived."""
     start_time = time.time()
-    
-    # Step 1: Connection check to validate credentials and URL
-    print(f"\n🔗 Verifying Workbench Connection...")
+    client = WorkbenchClient(url, username, token)
+
+    print("\n🔗 Verifying Workbench Connection...")
     print("=" * 60)
-    check_workbench_connection(url, username, token)
+    check_workbench_connection(client)
 
-    # Step 2: Fetch scans and find old ones
     print(f"\n🔍 Fetching Scans from Workbench (older than {days} days)...")
-    scans = fetch_all_scans(url, username, token)
+    scans = fetch_all_scans(client)
 
-    print(f"\n🎯 Identifying Scan Ranges for Info Collection...")
-    old_scans = find_and_process_old_scans(scans, url, username, token, days)
+    print("\n🎯 Identifying Scan Ranges for Info Collection...")
+    old_scans = find_and_process_old_scans(scans, client, days)
     if not old_scans:
         print(f"\n📋 No scans found older than {days} days.")
         # Still create an empty plan file
@@ -857,12 +681,12 @@ def cmd_plan(url: str, username: str, token: str, days: int, output_file: str):
 def cmd_archive(url: str, username: str, token: str, plan_file: str):
     """Archive scans based on a plan file."""
     start_time = time.time()
+    client = WorkbenchClient(url, username, token)
 
     print(f"\n📂 Executing archive operation from {plan_file}...")
     print("=" * 60)
-    
-    # Step 1: Connection check to validate credentials and URL
-    check_workbench_connection(url, username, token)
+
+    check_workbench_connection(client)
     
     # Step 2: Load the archive plan
     plan = load_plan_from_file(plan_file)
@@ -897,7 +721,7 @@ def cmd_archive(url: str, username: str, token: str, plan_file: str):
     print(f"\n🚀 Starting archive operation...")
     print("=" * 60)
 
-    success = archive_scans_from_plan(url, username, token, plan)
+    success = archive_scans_from_plan(client, plan)
 
     total_time = time.time() - start_time
     

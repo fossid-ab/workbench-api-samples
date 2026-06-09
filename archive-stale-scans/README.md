@@ -13,6 +13,13 @@ This allows for validation and review before performing any destructive operatio
 This script will not **delete** scans - instead it **archives** them. Archiving a scan removes the files associated with that scan, but keeps the results for future review. This will reduce overall storage usage by Workbench while keeping results for review.
 
 # Pre-Requisites
+
+Install the Workbench SDK from the repo root:
+
+```sh
+pip install -r ../requirements-sdk.txt
+```
+
 You need to provide a Workbench URL, User, and Token to use this script.
 These can be provided as Arguments or Environment Variables (recommended).
 

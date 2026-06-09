@@ -7,6 +7,12 @@ The call to action is to drop the file into Quick View in Workbench to dig deepe
 
 # Setting Up
 
+Install the Workbench SDK from the repo root:
+
+```sh
+pip install -r ../requirements-sdk.txt
+```
+
 You need to provide a Workbench URL, User, and Token to use this script.
 These can be provided as Arguments or Environment Variables (recommended).
 

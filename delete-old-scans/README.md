@@ -17,7 +17,7 @@ This script finds and **permanently deletes** old scans from the FossID Workbenc
 
 ## Prerequisites
 
-- Python 3.6 or higher
+- Python 3.10 or higher
 - Access to a FossID Workbench instance
 - Valid Workbench API credentials (username and token)
 
@@ -27,7 +27,7 @@ This script finds and **permanently deletes** old scans from the FossID Workbenc
 2. Install the required dependencies:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt   # includes ../requirements-sdk.txt
 ```
 
 ## Configuration

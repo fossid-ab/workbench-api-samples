@@ -1,0 +1,2 @@
+-e ./vendor/workbench-agent-ce
+-e .

@@ -14,6 +14,12 @@ Then use this script once the Workbench Agent completes its run!
 
 # Setting Up
 
+Install the Workbench SDK from the repo root:
+
+```sh
+pip install -r ../requirements-sdk.txt
+```
+
 You need to provide a Workbench URL, User, and Token to use this script.
 These can be provided as Arguments or Environment Variables (recommended).
 

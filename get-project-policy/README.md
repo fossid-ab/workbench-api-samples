@@ -8,6 +8,12 @@ The script connects to the Workbench API and fetches detailed policy information
 
 ## Setting Up
 
+Install the Workbench SDK from the repo root:
+
+```sh
+pip install -r ../requirements-sdk.txt
+```
+
 You need to provide a Workbench URL, User, and Token to use this script.
 These can be provided as Arguments or Environment Variables (recommended).
 

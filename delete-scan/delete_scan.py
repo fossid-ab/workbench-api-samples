@@ -7,34 +7,32 @@ import argparse
 import os
 import sys
 import logging
-import requests
+
+from workbench_agent.api.exceptions import WorkbenchApiError
+
+from lib.workbench_client import client_from_env_or_args, normalize_api_url
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def delete_scan(url: str, username: str, token: str, scan_code: str) -> bool:
-    """Delete a scan."""
-    payload = {
-        "group": "scans",
-        "action": "delete",
-        "data": {"username": username, "key": token, "scan_code": scan_code},
-    }
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        return response.status_code == 200
-    except requests.exceptions.RequestException as e:
-        logging.error("Error deleting scan %s: %s", scan_code, str(e))
-        return False
 
 def main(url: str, username: str, token: str, scan_code: str):
     """Main function to delete a scan."""
-    logging.info(f"Attempting to delete scan with code: {scan_code}")
-    
-    if delete_scan(url, username, token, scan_code):
-        logging.info(f"Successfully deleted scan: {scan_code}")
-    else:
-        logging.error(f"Failed to delete scan: {scan_code}")
+    logging.info("Attempting to delete scan with code: %s", scan_code)
+
+    client = client_from_env_or_args(url=url, user=username, token=token)
+
+    try:
+        result = client.scan_deletion.delete_scan(scan_code)
+        if result.success:
+            logging.info("Successfully deleted scan: %s", scan_code)
+        else:
+            logging.error("Failed to delete scan: %s", scan_code)
+            sys.exit(1)
+    except WorkbenchApiError as e:
+        logging.error("Workbench API error deleting scan %s: %s", scan_code, e)
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Delete a specific scan.")
@@ -56,8 +54,6 @@ if __name__ == "__main__":
         )
         sys.exit(1)
 
-    # Sanity check for Workbench URL
-    if not api_url.endswith("/api.php"):
-        api_url += "/api.php"
+    api_url = normalize_api_url(api_url)
 
     main(api_url, api_username, api_token, args.scan_code)

@@ -1,4 +1,4 @@
-requests
+-r ../requirements-sdk.txt
 python-dotenv
 pycodestyle
 pylint
