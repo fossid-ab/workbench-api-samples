@@ -459,10 +459,10 @@ def find_old_scans(
             try:
                 scan_details = sample_details[scan_code]
                 if not scan_details.get("is_archived"):
-                    update_date = parse_datetime_fast(scan_details["updated"])
+                    update_date = parse_datetime_fast(scan_details.get("updated") or scan_details["created"])
                     is_old = update_date < time_limit
                     sample_ages.append((sample_indices[i], is_old, update_date))
-            except (KeyError, ValueError):
+            except (KeyError, ValueError, TypeError):
                 continue
     
     if not sample_ages:
@@ -591,7 +591,7 @@ def process_scans(
                 
             try:
                 creation_date = parse_datetime_fast(scan_details["created"])
-                update_date = parse_datetime_fast(scan_details["updated"])
+                update_date = parse_datetime_fast(scan_details.get("updated") or scan_details["created"])
                 
                 if update_date < time_limit:
                     project_code = scan_details.get("project_code")
@@ -602,7 +602,7 @@ def process_scans(
                         creation_date,
                         update_date,
                     ))
-            except (KeyError, ValueError) as e:
+            except (KeyError, ValueError, TypeError) as e:
                 logging.warning("Invalid date format for scan %s: %s",
                                 scan_code, str(e))
                 continue
