@@ -105,7 +105,10 @@ def find_old_scans(
         if scan_details["is_archived"]:
             continue
         creation_date = datetime.strptime(scan_details["created"], "%Y-%m-%d %H:%M:%S")
-        update_date = datetime.strptime(scan_details["updated"], "%Y-%m-%d %H:%M:%S")
+        # "updated" can be null; fall back to the creation date
+        update_date = datetime.strptime(
+            scan_details.get("updated") or scan_details["created"], "%Y-%m-%d %H:%M:%S"
+        )
         if update_date < time_limit:
             project_code = scan_details.get("project_code")
             project_name = "No Project"
