@@ -168,7 +168,7 @@ def delete_scans(
             logging.error("Failed to delete scan: %s", scan_name)
 
 
-def main(url: str, username: str, token: str, days: int, dry_run: bool):
+def main(url: str, username: str, token: str, days: int, dry_run: bool, confirm: bool):
     """Main function to delete old scans."""
     old_scans = fetch_and_find_old_scans(url, username, token, days)
     if not old_scans:
@@ -180,12 +180,13 @@ def main(url: str, username: str, token: str, days: int, dry_run: bool):
     if dry_run:
         return
 
-    print("\n⚠️  WARNING: This operation will PERMANENTLY DELETE the scans listed above!")
-    print("   Unlike archiving, deleted scans cannot be recovered.")
-    confirmation = input("Are you absolutely sure you want to proceed? (yes/no): ")
-    if confirmation.lower() != "yes":
-        logging.info("Operation cancelled.")
-        return
+    if not confirm:
+        print("\n⚠️  WARNING: This operation will PERMANENTLY DELETE the scans listed above!")
+        print("   Unlike archiving, deleted scans cannot be recovered.")
+        confirmation = input("Are you absolutely sure you want to proceed? (yes/no): ")
+        if confirmation.lower() != "yes":
+            logging.info("Operation cancelled.")
+            return
 
     delete_scans(url, username, token, old_scans)
 
@@ -206,6 +207,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Display scans that would be deleted without actually deleting them",
     )
+    parser.add_argument(
+        "--confirm", "-c",
+        action="store_true",
+        help="Automatically confirm operation, useful for automation (default: False)"
+    )
 
     args = parser.parse_args()
 
@@ -224,4 +230,4 @@ if __name__ == "__main__":
     if not api_url.endswith("/api.php"):
         api_url += "/api.php"
 
-    main(api_url, api_username, api_token, args.days, args.dry_run) 
+    main(api_url, api_username, api_token, args.days, args.dry_run, args.confirm)

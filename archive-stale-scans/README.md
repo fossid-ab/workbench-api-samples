@@ -84,6 +84,12 @@ You can also target a archive plan in another location with `-i`:
 python3 archive_stale_scans.py archive -i archive_plan.json
 ```
 
+To run unattended (for example from cron or CI), skip the confirmation prompt with `--confirm` / `-c`:
+
+```bash
+python3 archive_stale_scans.py archive -i archive_plan.json --confirm
+```
+
 ## Archive Plan JSON Schema
 
 The generated plan file contains structured data about each scan:

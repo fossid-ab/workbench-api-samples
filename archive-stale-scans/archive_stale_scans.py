@@ -324,6 +324,12 @@ def list_scans(url: str, username: str, token: str) -> Dict[str, Any]:
             # No more data returned
             break
 
+        # Some Workbench versions ignore the page parameter and return the same
+        # full page every time, which would otherwise loop forever.
+        if scans_page.keys() <= all_scans.keys():
+            logging.info("No new scans returned. Stopping pagination.")
+            break
+
         # Merge this page's scans into the total
         all_scans.update(scans_page)
         current_count = len(all_scans)
@@ -854,7 +860,7 @@ def cmd_plan(url: str, username: str, token: str, days: int, output_file: str):
     print("=" * 60)
 
 
-def cmd_archive(url: str, username: str, token: str, plan_file: str):
+def cmd_archive(url: str, username: str, token: str, plan_file: str, confirm: bool):
     """Archive scans based on a plan file."""
     start_time = time.time()
 
@@ -885,13 +891,14 @@ def cmd_archive(url: str, username: str, token: str, plan_file: str):
         print(f"   ... and {len(plan) - 5:,} more scans")
     
     # Step 4: Confirm operation
-    print(f"\n⚠️  WARNING: This will archive {len(plan):,} scans.")
-    print("   This operation is IRREVERSIBLE!")
-    confirmation = input(f"\n❓ Proceed with archiving? (y/n): ")
-    
-    if confirmation.lower() != "y":
-        print("❌ Operation cancelled.")
-        return
+    if not confirm:
+        print(f"\n⚠️  WARNING: This will archive {len(plan):,} scans.")
+        print("   This operation is IRREVERSIBLE!")
+        confirmation = input(f"\n❓ Proceed with archiving? (y/n): ")
+
+        if confirmation.lower() != "y":
+            print("❌ Operation cancelled.")
+            return
 
     # Step 5: Execute archive operation
     print(f"\n🚀 Starting archive operation...")
@@ -964,6 +971,11 @@ Examples:
         "--input", "-i", type=str, default=DEFAULT_PLAN_FILE,
         help=f"Input JSON plan file to execute (default: {DEFAULT_PLAN_FILE})"
     )
+    archive_parser.add_argument(
+        "--confirm", "-c",
+        action="store_true",
+        help="Automatically confirm operation, useful for automation (default: False)"
+    )
 
     args = parser.parse_args()
 
@@ -978,4 +990,4 @@ Examples:
     if args.command == "plan":
         cmd_plan(api_url, api_username, api_token, args.days, args.output)
     elif args.command == "archive":
-        cmd_archive(api_url, api_username, api_token, args.input)
+        cmd_archive(api_url, api_username, api_token, args.input, args.confirm)

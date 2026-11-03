@@ -159,6 +159,17 @@ class TestAPIFunctions(unittest.TestCase):
         self.assertIn("scan2", result)
         self.assertEqual(result["scan1"]["name"], "Scan 1")
     
+    @patch('archive_stale_scans.RECORDS_PER_PAGE', 2)
+    @patch('archive_stale_scans.make_api_call')
+    def test_list_scans_stops_when_page_repeats(self, mock_api):
+        """Stop paginating when the server ignores the page parameter."""
+        full_page = {"scan1": {"code": "scan1"}, "scan2": {"code": "scan2"}}
+        mock_api.side_effect = [full_page, full_page, full_page]
+
+        result = list_scans("url", "user", "token")
+        self.assertEqual(set(result), {"scan1", "scan2"})
+        self.assertEqual(mock_api.call_count, 2)
+
     @patch('archive_stale_scans.make_api_call')
     def test_get_scan_info_batch(self, mock_api):
         """Test batch scan info retrieval."""
