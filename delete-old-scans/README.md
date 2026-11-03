@@ -90,11 +90,12 @@ python delete_old_scans.py \
 | `--workbench-token` | Your Workbench API token | From `WORKBENCH_TOKEN` env var |
 | `--days` | Scan age in days to consider old | 365 |
 | `--dry-run` | Preview mode - show what would be deleted without deleting | False |
+| `--confirm`, `-c` | Skip the confirmation prompt, for unattended runs | False |
 
 ## Safety Features
 
 1. **Dry Run Mode**: Always test with `--dry-run` first to see what would be deleted
-2. **Explicit Confirmation**: Requires typing "yes" (not just "y") to proceed with deletion
+2. **Explicit Confirmation**: Requires typing "yes" (not just "y") to proceed with deletion, unless `--confirm` is passed
 3. **Clear Warnings**: Multiple warnings about the permanent nature of deletion
 4. **Archived Scan Protection**: Skips scans that are already archived
 5. **Detailed Logging**: Comprehensive logging of all operations
